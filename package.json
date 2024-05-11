@@ -5,7 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",	
+    "start2": "node index.js",
+    "start": "webpack --progress --hide-modules --mode production",
+    "heroku-prebuild": "npm install --dev",	
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "CTO DSF.Finance Andrey Averin",
