@@ -5,12 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "webpack --progress --hide-modules --mode production",
-    "build": "webpack --mode=production --node-env=production",
-    "build:dev": "webpack --mode=development",
-    "build:prod": "webpack --mode=production --node-env=production",
-    "watch": "webpack --watch",
-    "serve": "webpack serve",
+    "start": "node index.js",
     "heroku-prebuild": "npm install --dev"
   },
   "author": "CTO DSF.Finance Andrey Averin",
