@@ -6,9 +6,14 @@
   "type": "module",
   "scripts": {
     "start2": "node index.js",
+    "build": "webpack --mode=production --node-env=production",
+    "build:dev": "webpack --mode=development",
+    "build:prod": "webpack --mode=production --node-env=production",
+    "watch": "webpack --watch",
+    "serve": "webpack serve",
     "start": "webpack --progress --hide-modules --mode production",
-    "heroku-prebuild": "npm install --dev",	
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "heroku-prebuild": "npm install --dev"
+    }
   },
   "author": "CTO DSF.Finance Andrey Averin",
   "license": "MIT",
