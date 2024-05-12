@@ -5,13 +5,13 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start2": "node index.js",
+    "start": "node index.js",
     "build": "webpack --mode=production --node-env=production",
     "build:dev": "webpack --mode=development",
     "build:prod": "webpack --mode=production --node-env=production",
     "watch": "webpack --watch",
     "serve": "webpack serve",
-    "start": "webpack --progress --hide-modules --mode production",
+    "start2": "webpack --progress --hide-modules --mode production",
     "heroku-prebuild": "npm install --dev"
     }
   },
