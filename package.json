@@ -5,15 +5,14 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
+    "start2": "node index.js",
     "build": "webpack --mode=production --node-env=production",
     "build:dev": "webpack --mode=development",
     "build:prod": "webpack --mode=production --node-env=production",
     "watch": "webpack --watch",
     "serve": "webpack serve",
-    "start2": "webpack --progress --hide-modules --mode production",
+    "start": "webpack --progress --hide-modules --mode production",
     "heroku-prebuild": "npm install --dev"
-    }
   },
   "author": "CTO DSF.Finance Andrey Averin",
   "license": "MIT",
