@@ -22,7 +22,7 @@
     "mysql2": "^3.0.0",
     "node-cron": "^3.0.3",
     "web3": "^1.5.2",
-    "webpack-cli": "^4.9.0" // Добавляем webpack-cli сюда
+    "webpack-cli": "^4.9.0"
   },
   "devDependencies": {
     "webpack": "^5.91.0"
