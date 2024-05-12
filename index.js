@@ -210,10 +210,12 @@ app.get('/api.dsf.finance/:walletAddress', async (req, res) => {
     try {
         // Получаем соединение с базой данных
         connection = await pool.getConnection();
+        console.log(connection);
         
         // Проверяем наличие кошелька в базе данных
         const [rows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
-
+        console.log("Rows from database:", rows);
+        
         if (rows.length === 0) {
             // Если кошелек не найден, получаем данные и сохраняем их
             try {
