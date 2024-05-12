@@ -6,11 +6,11 @@
   "type": "module",
   "scripts": {
     "start": "webpack --progress --hide-modules --mode production",
-    "build": "node_modules/.bin/webpack --mode=production --node-env=production",
-    "build:dev": "node_modules/.bin/webpack --mode=development",
-    "build:prod": "node_modules/.bin/webpack --mode=production --node-env=production",
-    "watch": "node_modules/.bin/webpack --watch",
-    "serve": "node_modules/.bin/webpack serve",
+    "build": "webpack --mode=production --node-env=production",
+    "build:dev": "webpack --mode=development",
+    "build:prod": "webpack --mode=production --node-env=production",
+    "watch": "webpack --watch",
+    "serve": "webpack serve",
     "heroku-prebuild": "npm install --dev"
   },
   "author": "CTO DSF.Finance Andrey Averin",
@@ -21,7 +21,8 @@
     "mongodb": "^4.1.2",
     "mysql2": "^3.0.0",
     "node-cron": "^3.0.3",
-    "web3": "^1.5.2"
+    "web3": "^1.5.2",
+    "webpack-cli": "^4.9.0" // Добавляем webpack-cli сюда
   },
   "devDependencies": {
     "webpack": "^5.91.0"
