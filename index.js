@@ -352,6 +352,70 @@ async function updateAllWallets() {
     }
 }
 
+app.post('/add/:walletAddress', async (req, res) => {
+    const walletAddress = req.params.walletAddress.toLowerCase();
+    let connection;
+
+    try {
+        // Получаем соединение с базой данных
+        connection = await pool.getConnection();
+        
+        // Проверяем наличие кошелька в базе данных
+        const [rows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
+
+        if (rows.length === 0) {
+            // Если кошелек не найден, получаем данные и сохраняем их
+            try {
+                const walletData = await getWalletData(walletAddress);
+                const insertQuery = `
+                    INSERT INTO wallet_info (
+                        wallet_address,
+                        user_deposits,
+                        dsf_lp_balance,
+                        ratio_user,
+                        available_to_withdraw,
+                        cvx_share,
+                        cvx_cost,
+                        crv_share,
+                        crv_cost,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                `;
+                await connection.query(insertQuery, [
+                    walletAddress,
+                    walletData.userDeposits,
+                    walletData.dsfLpBalance,
+                    walletData.safeRatioUser,
+                    walletData.availableToWithdraw,
+                    walletData.cvxShare,
+                    walletData.cvxCost,
+                    walletData.crvShare,
+                    walletData.crvCost
+                ]);
+                // Отправляем полученные данные клиенту
+                const serializedData = serializeBigints(walletData); // Сериализация данных
+                res.json(serializedData); // Отправка сериализованных данных
+            } catch (error) {
+                // Логируем ошибку и отправляем ответ сервера
+                console.error('Failed to retrieve or insert wallet data:', error);
+                res.status(500).send('Internal Server Error');
+            }
+        } else {
+            // Если данные уже есть, возвращаем их
+            res.json(rows[0]);
+        }
+    } catch (error) {
+        // Обработка ошибок при соединении или выполнении SQL-запроса
+        console.error('Database connection or operation failed:', error);
+        res.status(500).send('Internal Server Error');
+    } finally {
+        // Освобождение соединения
+        if (connection) {
+            connection.release();
+        }
+    }
+});
+
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
