@@ -307,6 +307,7 @@ async function updateAllWallets() {
     try {
         connection = await pool.getConnection();
         const [wallets] = await connection.query('SELECT wallet_address FROM wallet_info');
+        console.log(wallets);
         for (const wallet of wallets) {
             await updateWalletData(wallet.wallet_address);
         }
