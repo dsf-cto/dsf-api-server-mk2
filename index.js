@@ -83,6 +83,9 @@ const crvToUsdtPath = [contractsLib.CRV,contractsLib.WETH,contractsLib.USDT];
 const cvxToUsdtPath = [contractsLib.CVX,contractsLib.WETH,contractsLib.USDT];
 
 async function getWalletData(walletAddress_) {
+    if (!walletAddress) {
+        throw new Error("walletAddress is not defined");
+    }
     try {
         const walletAddress = normalizeAddress(walletAddress_);
         console.log('Normalized Address:', walletAddress);
@@ -269,52 +272,6 @@ app.get('/api.dsf.finance/:walletAddress', async (req, res) => {
     }
 });
 
-// cron.schedule('0 */3 * * *', async () => {
-//     console.log('Running a task every 3 hours');
-//     let connection;
-//     try {
-//         connection = await pool.getConnection();
-//         const [wallets] = await connection.query('SELECT wallet_address FROM wallet_info');
-//         for (const wallet of wallets) {
-//             try {
-//                 const walletData = await getWalletData(wallet.wallet_address);
-//                 const updateQuery = `
-//                     UPDATE wallet_info 
-//                     SET 
-//                         user_deposits = ?,
-//                         dsf_lp_balance = ?,
-//                         ratio_user = ?,
-//                         available_to_withdraw = ?,
-//                         cvx_share = ?,
-//                         cvx_cost = ?,
-//                         crv_share = ?,
-//                         crv_cost = ?,
-//                         updated_at = NOW()
-//                     WHERE wallet_address = ?
-//                 `;
-//                 await connection.query(updateQuery, [
-//                     walletData.userDeposits,
-//                     walletData.dsfLpBalance,
-//                     walletData.ratioUser_,
-//                     walletData.availableToWithdraw,
-//                     walletData.cvxShare,
-//                     walletData.cvxCost,
-//                     walletData.crvShare,
-//                     walletData.crvCost,
-//                     wallet.wallet_address
-//                 ]);
-//                 console.log(`Data updated for wallet: ${wallet.wallet_address}`);
-//             } catch (error) {
-//                 console.error(`Error updating data for wallet ${wallet.wallet_address}:`, error);
-//             }
-//         }
-//     } catch (error) {
-//         console.error('Scheduled task error:', error);
-//     } finally {
-//         if (connection) connection.release();
-//     }
-// });
-
 cron.schedule('0 */3 * * *', async () => {
     console.log('Running a task every 3 hours');
     updateAllWallets(); // Вызов функции обновления всех кошельков
@@ -396,8 +353,7 @@ async function updateAllWallets() {
     }
 }
 
-
+const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Server is listening on port ${port}`);
-    updateAllWallets(); // Обновление данных всех кошельков при старте
+  console.log(`Server is listening on port ${port}`);
 });
