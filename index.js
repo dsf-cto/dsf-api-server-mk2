@@ -1,10 +1,8 @@
-// Импорт модуля events для установки максимального количества слушателей
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
 import express from 'express';
 import Web3 from 'web3';
-//import mysql from 'mysql2';
 import mysql from 'mysql2/promise'; // Используйте это для работы с промисами
 import cron from 'node-cron';
 import axios from 'axios';
@@ -29,10 +27,6 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
-
-// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
-//         await pool.query(dropTableQuery);
-//         console.log('Таблица успешно удалена');
 
 const createTableQuery = `
     CREATE TABLE IF NOT EXISTS wallet_info (
@@ -66,7 +60,6 @@ pool.getConnection()
         console.error("Database connection failed:", err);
     });
 
-
 const provider = new Web3.providers.HttpProvider('https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8');
 const web3 = new Web3(provider);
 
@@ -90,8 +83,6 @@ async function getWalletData(walletAddress_) {
         console.log('Normalized Address:', walletAddress);
 
         const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
-        //console.log(`https://api.dsf.finance/deposit/${walletAddress}`);
-        //console.log('Full response data:', JSON.stringify(response.data, null, 2));
         
         const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
 
@@ -129,28 +120,6 @@ async function getWalletData(walletAddress_) {
         const safeCrvShare = crvShare ? parseFloat(crvShare) : 0.0;
         const cvxShare = Number(cvxShare_) / 1e18;
         const safeCvxShare = cvxShare ? parseFloat(cvxShare) : 0.0;
-
-        // console.log("DSF total CRV   : " + Number(amountInCRV) / 1e18);
-        // console.log("DSF total CVX   : " + Number(amountInCVX) / 1e18);
-        // console.log("  "); 
-        // console.log("User tokenCRV   : " +  crvShare_ / 1e18);
-        // console.log("User tokenCVX   : " +  cvxShare_ / 1e18); 
-        // console.log("  "); 
-        // console.log("Ratio User: " +  ratioUser_);
-        // console.log("Ratio User: " +  ratioUser);
-        // console.log("  ");  
-
-        // console.log("crvShare_ Math.trun : " + Math.trunc(crvShare_));
-        // console.log("cvxShare_ Math.trun : " + Math.trunc(cvxShare_));
-
-        // console.log("Sushi CRV in USDT: " + crvCost_Array);
-        // console.log("Sushi CVX in USDT: " + cvxCost_Array);
-        // console.log("-------------------------------------------------- "); 
-
-        
-        // console.log("UserCRV in USDT: " + crvCost);
-        // console.log("UserCVX in USDT: " + cvxCost);
-        // console.log("-------------------------------------------------- ");  
 
         console.log("response            : " + response);
         console.log("userDeposits        : " + userDeposits);
@@ -200,14 +169,6 @@ function serializeBigints(obj) {
 app.get('/wallet/:walletAddress', async (req, res) => {
     const walletAddress = req.params.walletAddress.toLowerCase();
     let connection;
-
-    // try {
-    //     await updateWalletData(walletAddress);
-    //     res.send({ message: 'Data updated successfully' });
-    // } catch (error) {
-    //     console.error('Failed to update data:', error);
-    //     res.status(500).send('Failed to update wallet data');
-    // }
 
     try {
         // Получаем соединение с базой данных
@@ -352,7 +313,7 @@ async function updateAllWallets() {
     }
 }
 
-app.post('/add/:walletAddress', async (req, res) => {
+app.get('/add/:walletAddress', async (req, res) => {
     const walletAddress = req.params.walletAddress.toLowerCase();
     let connection;
 
