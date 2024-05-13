@@ -197,7 +197,7 @@ function serializeBigints(obj) {
     return obj;
 }
 
-app.get('/api.dsf.finance/:walletAddress', async (req, res) => {
+app.get('/wallet/:walletAddress', async (req, res) => {
     const walletAddress = req.params.walletAddress.toLowerCase();
     let connection;
 
