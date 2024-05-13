@@ -167,8 +167,13 @@ function serializeBigints(obj) {
 }
 
 app.get('/wallet/:walletAddress', async (req, res) => {
-    const walletAddress = req.params.walletAddress.toLowerCase();
+    const walletAddress_ = req.params.walletAddress.toLowerCase();
+    const walletAddress = normalizeAddress(walletAddress_);
+        console.log('Normalized Address:', walletAddress);
+        
     let connection;
+    //const walletAddress = req.params.walletAddress.toLowerCase();
+    //let connection;
 
     try {
         // Получаем соединение с базой данных
