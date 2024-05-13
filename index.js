@@ -19,7 +19,6 @@ import crvABI from './utils/CRV_abi.json' assert {type: 'json'};
 import cvxABI from './utils/CVX_abi.json' assert {type: 'json'};
 
 const app = express();
-const port = 3000;
 
 const pool = mysql.createPool({
     host: 'tpark720.beget.tech',
