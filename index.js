@@ -60,8 +60,34 @@ pool.getConnection()
         console.error("Database connection failed:", err);
     });
 
-const provider = new Web3.providers.HttpProvider('https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8');
-const web3 = new Web3(provider);
+const providers = [
+    'https://eth-mainnet.g.alchemy.com/v2/l2vP2jWVn5GXemM54j4HgJQMjMkv9llV',
+    'https://mainnet.infura.io/v3/f2f27632352546e19b5a27d2f7be2ee1',
+    'https://eth-mainnet.g.alchemy.com/v2/wWnKdcZV4LkHCgJdJKiwY7MiDrH6zyJN',
+    'https://eth-mainnet.g.alchemy.com/v2/xrVK352FsLCuyBCRhN6YUKVrANu_lAfW',
+    'https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8'
+];
+
+let providerIndex = 0;
+let web3;
+//const provider = new Web3.providers.HttpProvider('https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8');
+//const web3 = new Web3(provider);
+
+async function connectToWeb3Provider() {
+    try {
+        const selectedProvider = providers[providerIndex];
+        web3 = new Web3(selectedProvider);
+        await web3.eth.net.getId();
+        console.log(`Connected to Ethereum network using provider: ${selectedProvider}`);
+    } catch (error) {
+        console.error(`Failed to connect to provider ${providers[providerIndex]}:`, error);
+        // Переходим к следующему провайдеру
+        providerIndex = (providerIndex + 1) % providers.length;
+        await connectToWeb3Provider(); // Рекурсивно пытаемся подключиться к следующему провайдеру
+    }
+}
+
+connectToWeb3Provider();
 
 const contractDSF = new web3.eth.Contract(dsfABI, contractsLib.DSFmain);
 const contractDSFStrategy = new web3.eth.Contract(dsfStrategyABI, contractsLib.DSFStrategy);
