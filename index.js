@@ -75,13 +75,12 @@ const crvToUsdtPath = [contractsLib.CRV,contractsLib.WETH,contractsLib.USDT];
 const cvxToUsdtPath = [contractsLib.CVX,contractsLib.WETH,contractsLib.USDT];
 
 async function getWalletData(walletAddress_) {
-    if (!walletAddress) {
+    if (!walletAddress_) {
         throw new Error("walletAddress is not defined");
     }
+    const walletAddress = normalizeAddress(walletAddress_);
+    console.log('Normalized Address:', walletAddress);
     try {
-        const walletAddress = normalizeAddress(walletAddress_);
-        console.log('Normalized Address:', walletAddress);
-
         const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
         
         const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
