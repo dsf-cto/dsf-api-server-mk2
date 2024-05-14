@@ -11,15 +11,10 @@
   "author": "CTO DSF.Finance Andrey Averin",
   "license": "MIT",
   "dependencies": {
-    "axios": "^0.21.1",
-    "express": "^4.17.1",
-    "mongodb": "^4.1.2",
-    "mysql2": "^3.0.0",
+    "axios": "^1.6.8",
+    "express": "^4.19.2",
+    "mongodb": "^6.6.0",
+    "mysql2": "^3.9.7",
     "node-cron": "^3.0.3",
-    "web3": "^1.5.2",
-    "webpack-cli": "^4.9.0"
-  },
-  "devDependencies": {
-    "webpack": "^5.91.0"
-  }
+    "web3": "^4.5.0"
 }
