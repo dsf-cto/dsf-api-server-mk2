@@ -408,6 +408,30 @@ app.get('/add/:walletAddress', async (req, res) => {
     }
 });
 
+app.get('/wallets', async (req, res) => {
+    let connection;
+
+    try {
+        // Получаем соединение с базой данных
+        connection = await pool.getConnection();
+
+        // Получаем все кошельки из базы данных
+        const [rows] = await connection.query('SELECT * FROM wallet_info');
+
+        // Отправляем список кошельков клиенту в формате JSON
+        res.json(rows);
+    } catch (error) {
+        // Обработка ошибок при соединении или выполнении SQL-запроса
+        console.error('Database connection or operation failed:', error);
+        res.status(500).send('Internal Server Error');
+    } finally {
+        // Освобождение соединения
+        if (connection) {
+            connection.release();
+        }
+    }
+});
+
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
