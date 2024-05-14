@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-EventEmitter.defaultMaxListeners = 20;
+EventEmitter.defaultMaxListeners = 22;
 
 import express from 'express';
 import Web3 from 'web3';
