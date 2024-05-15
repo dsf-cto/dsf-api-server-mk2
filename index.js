@@ -155,13 +155,13 @@ async function getWalletData(walletAddress_) {
         let crvCost = 0;
         let cvxCost = 0;
 
-        if (ratioUser_ > 0) {
-            const crvShare_ = Number(amountInCRV) * Number(ratioUser_) / 1e18 * 0.85; // ratioUser_ CRV
-            const cvxShare_ = Number(amountInCVX) * Number(ratioUser_) / 1e18 * 0.85; // ratioUser_ CVX
-            
+        const crvShare_ = Math.trunc(Number(amountInCRV) * Number(ratioUser_) / 1e18 * 0.85); // ratioUser_ CRV
+        const cvxShare_ = Math.trunc(Number(amountInCVX) * Number(ratioUser_) / 1e18 * 0.85); // ratioUser_ CVX
+
+        if (crvShare_ > 20000 && cvxShare_ > 20000) {
             const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
             const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
-            
+
             crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
             cvxCost = Number(cvxCost_Array[cvxCost_Array.length - 1]) / 1e6;
 
@@ -170,9 +170,7 @@ async function getWalletData(walletAddress_) {
         } 
 
         const ratioUser = parseFloat(ratioUser_) / 1e16;
-        console.log('ratioUser:',ratioUser);
         const safeRatioUser = (ratioUser ? parseFloat(ratioUser) : 0.0).toPrecision(16);
-        console.log('safeRatioUser:',safeRatioUser);
 
         console.log("response            : " + response);
         console.log("userDeposits        : " + userDeposits);
