@@ -113,13 +113,27 @@ async function getWalletData(walletAddress) {
     let dsfLpBalance = 0;
 
     try {
-        [ratioUser, availableToWithdraw, dsfLpBalance] = await Promise.all([
-            ratioContract.methods.calculateLpRatio(normalizedAddress).call(),
-            contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser, 2).call(),
-            contractDSF.methods.balanceOf(normalizedAddress).call()
-        ]);
+        ratioUser = await ratioContract.methods.calculateLpRatio(normalizedAddress).call();
+        console.log('ratioUser:', ratioUser);
     } catch (error) {
-        console.error("Error occurred while fetching data:", error);
+        console.error("Error occurred while fetching ratio:", error);
+        ratioUser = 0; // Установка значения 0 в случае ошибки
+    }
+
+    try {
+        availableToWithdraw = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser, 2).call();
+        console.log('availableToWithdraw:', availableToWithdraw);
+    } catch (error) {
+        console.error("Error occurred while fetching available to withdraw:", error);
+        availableToWithdraw = 0; // Установка значения 0 в случае ошибки
+    }
+
+    try {
+        dsfLpBalance = await contractDSF.methods.balanceOf(normalizedAddress).call();
+        console.log('dsfLpBalance:', dsfLpBalance);
+    } catch (error) {
+        console.error("Error occurred while fetching DSF LP balance:", error);
+        dsfLpBalance = 0; // Установка значения 0 в случае ошибки
     }
 
     try {
@@ -185,7 +199,6 @@ async function getWalletData(walletAddress) {
         };
     } catch (error) {
         console.error('Error retrieving data for wallet:', normalizedAddress, error);
-        ratioUser = 0; 
         throw error;
     }
 }
