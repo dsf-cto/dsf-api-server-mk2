@@ -100,88 +100,85 @@ const config_cvxContract = new web3.eth.Contract(cvxABI, contractsLib.CVX);
 const crvToUsdtPath = [contractsLib.CRV,contractsLib.WETH,contractsLib.USDT];
 const cvxToUsdtPath = [contractsLib.CVX,contractsLib.WETH,contractsLib.USDT];
 
-async function getWalletData(walletAddress) {
-    if (!walletAddress) {
+async function getWalletData(walletAddress_) {
+    if (!walletAddress_) {
         throw new Error("walletAddress is not defined");
     }
-    
-    const normalizedAddress = normalizeAddress(walletAddress);
-    console.log('Normalized Address:', normalizedAddress);
+    const walletAddress = normalizeAddress(walletAddress_);
+    console.log('Normalized Address:', walletAddress);
 
-    let ratioUser = 0;
-    let availableToWithdraw = 0;
-    let dsfLpBalance = 0;
+    let ratioUser_ = 0; // Установите значение по умолчанию на случай ошибки
 
     try {
-        ratioUser = await ratioContract.methods.calculateLpRatio(normalizedAddress).call();
-        console.log('ratioUser:', ratioUser);
+        ratioUser_ = await ratioContract.methods.calculateLpRatio(walletAddress).call();
     } catch (error) {
         console.error("Error occurred while fetching ratio:", error);
-        ratioUser = 0; // Установка значения 0 в случае ошибки
+        ratioUser_ = 0; // Установка значения 0 в случае ошибки
     }
 
+    let availableToWithdraw_;
+
     try {
-        availableToWithdraw = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser, 2).call();
-        console.log('availableToWithdraw:', availableToWithdraw);
+        availableToWithdraw_ = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call();
     } catch (error) {
         console.error("Error occurred while fetching available to withdraw:", error);
-        availableToWithdraw = 0; // Установка значения 0 в случае ошибки
+        availableToWithdraw_ = 0; // Установка значения 0 в случае ошибки
     }
 
+    let dsfLpBalance_;
+
     try {
-        dsfLpBalance = await contractDSF.methods.balanceOf(normalizedAddress).call();
-        console.log('dsfLpBalance:', dsfLpBalance);
+        dsfLpBalance_ = await contractDSF.methods.balanceOf(walletAddress).call();
     } catch (error) {
         console.error("Error occurred while fetching DSF LP balance:", error);
-        dsfLpBalance = 0; // Установка значения 0 в случае ошибки
+        dsfLpBalance_ = 0; // Установка значения 0 в случае ошибки
     }
 
     try {
-        const availableToWithdrawUsdt = Number(availableToWithdraw) / 1e6;
-        const dsfLpBalanceUsdt = (Number(dsfLpBalance) / 1e18).toPrecision(18);
+        const availableToWithdraw = Number(availableToWithdraw_) / 1e6
+        const dsfLpBalance = (Number(dsfLpBalance_) / 1e18).toPrecision(18);
 
-        const response = await axios.get(`https://api.dsf.finance/deposit/${normalizedAddress}`);
-        console.log('response:', response.data);
-        const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
-
+        const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
+        const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
         const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
         const cvxTotalCliffs = await config_cvxContract.methods.totalCliffs().call();
-        const cvxTotalSupply = await config_cvxContract.methods.totalSupply().call();
-        const cvxReductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
-        const cvxBalanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
-        const crvBalanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
-
-        const cvxRemainCliffs = cvxTotalCliffs - cvxTotalSupply / cvxReductionPerCliff;
-        const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvxBalanceOf;
-        const amountInCRV = crvEarned + crvBalanceOf;
-
+        const cvx_totalSupply = await config_cvxContract.methods.totalSupply().call();
+        const cvx_reductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
+        const cvx_balanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const crv_balanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const cvxRemainCliffs = cvxTotalCliffs - cvx_totalSupply / cvx_reductionPerCliff;
+        const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvx_balanceOf;
+        const amountInCRV = crvEarned + crv_balanceOf;
+        
         let crvShare = 0;
         let cvxShare = 0;
         let crvCost = 0;
         let cvxCost = 0;
 
-        if (ratioUser > 0) {
-            const crvShare_ = Number(amountInCRV) * Number(ratioUser) / 1e18 * 0.85;
-            const cvxShare_ = Number(amountInCVX) * Number(ratioUser) / 1e18 * 0.85;
-
-            const crvCostArray = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
-            const cvxCostArray = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
-
-            crvCost = Number(crvCostArray[crvCostArray.length - 1]) / 1e6;
-            cvxCost = Number(cvxCostArray[cvxCostArray.length - 1]) / 1e6;
+        if (ratioUser_ > 0) {
+            const crvShare_ = Number(amountInCRV) * Number(ratioUser_) / 1e18 * 0.85; // ratioUser_ CRV
+            const cvxShare_ = Number(amountInCVX) * Number(ratioUser_) / 1e18 * 0.85; // ratioUser_ CVX
+            
+            const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
+            const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
+            
+            crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
+            cvxCost = Number(cvxCost_Array[cvxCost_Array.length - 1]) / 1e6;
 
             crvShare = Number(crvShare_) / 1e18;
             cvxShare = Number(cvxShare_) / 1e18;
         } 
 
-        const ratioUserPrecision = parseFloat(ratioUser) / 1e16;
-        const safeRatioUser = (ratioUserPrecision ? parseFloat(ratioUserPrecision) : 0.0).toPrecision(16);
+        const ratioUser = parseFloat(ratioUser_) / 1e16;
+        console.log('ratioUser:',ratioUser);
+        const safeRatioUser = (ratioUser ? parseFloat(ratioUser) : 0.0).toPrecision(16);
+        console.log('safeRatioUser:',safeRatioUser);
 
         console.log("response            : " + response);
         console.log("userDeposits        : " + userDeposits);
-        console.log("dsfLpBalance        : " + dsfLpBalanceUsdt);
-        console.log("ratioUser           : " + safeRatioUser + " " + ratioUser);
-        console.log("availableToWithdraw : " + availableToWithdrawUsdt);
+        console.log("dsfLpBalance        : " + dsfLpBalance);
+        console.log("ratioUser           : " + safeRatioUser + " " + ratioUser_);
+        console.log("availableToWithdraw : " + availableToWithdraw);
         console.log("cvxShare            : " + cvxShare);
         console.log("cvxCost in USDT     : " + cvxCost);
         console.log("crvShare            : " + crvShare);
@@ -189,17 +186,18 @@ async function getWalletData(walletAddress) {
 
         return {
             userDeposits,
-            dsfLpBalance: dsfLpBalanceUsdt,
-            ratioUser: safeRatioUser,
-            availableToWithdraw: availableToWithdrawUsdt,
+            dsfLpBalance,
+            safeRatioUser,
+            availableToWithdraw,
             cvxShare,
             cvxCost,
             crvShare,
             crvCost
         };
     } catch (error) {
-        console.error('Error retrieving data for wallet:', normalizedAddress, error);
-        throw error;
+        console.error('Error retrieving data for wallet:', walletAddress, error);
+        ratioUser_ = 0; 
+        throw error; // Проброс ошибки для дальнейшей обработки
     }
 }
 
