@@ -1,11 +1,15 @@
 import { EventEmitter } from 'events';
-EventEmitter.defaultMaxListeners = 22;
+EventEmitter.defaultMaxListeners = 20;
 
 import express from 'express';
 import Web3 from 'web3';
-import mysql from 'mysql2/promise'; // Используйте это для работы с промисами
+import mysql from 'mysql2/promise';
 import cron from 'node-cron';
 import axios from 'axios';
+import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+
+dotenv.config();
 
 import contractsLib from './utils/contract_addresses.json' assert {type: 'json'};
 import dsfABI from './utils/dsf_abi.json' assert {type: 'json'};
@@ -18,15 +22,51 @@ import cvxABI from './utils/CVX_abi.json' assert {type: 'json'};
 
 const app = express();
 
+// Ограничение частоты запросов
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 минут
+    max: 100, // Ограничение: 100 запросов с одного IP за 15 минут
+    message: "Too many requests from this IP, please try again later."
+});
+
+app.use(limiter);
+
+const colors = {
+    red: '\x1b[31m',
+    yellow: '\x1b[33m',
+    reset: '\x1b[0m'
+};
+
+function logError(message) {
+    console.error(`${colors.red}${message}${colors.reset}`);
+}
+
+function logWarning(message) {
+    console.warn(`${colors.yellow}${message}${colors.reset}`);
+}
+
+// Middleware to redirect HTTP to HTTPS
+app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'https') {
+        return res.redirect(`https://${req.headers.host}${req.url}`);
+    }
+    next();
+});
+
 const pool = mysql.createPool({
-    host: 'tpark720.beget.tech',
-    user: 'tpark720_dsf_api',
-    password: '241589DSFapi241589',
-    database: 'tpark720_dsf_api',
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// For RESTART DataBase : 
+// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
+//         await pool.query(dropTableQuery);
+//         console.log('Таблица успешно удалена');
 
 const createTableQuery = `
     CREATE TABLE IF NOT EXISTS wallet_info (
@@ -44,34 +84,25 @@ const createTableQuery = `
     );
 `;
 
-pool.getConnection()
-    .then(connection => {
-        connection.query(createTableQuery)
-            .then(() => {
-                console.log("Table 'wallet_info' checked/created successfully.");
-                connection.release();
-            })
-            .catch(err => {
-                console.error("Failed to create 'wallet_info' table:", err);
-                connection.release();
-            });
-    })
-    .catch(err => {
-        console.error("Database connection failed:", err);
-    });
+async function initializeDatabase() {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.query(createTableQuery);
+        console.log("Table 'wallet_info' checked/created successfully.");
+    } catch (error) {
+        logError("Failed to create 'wallet_info' table:", error);
+    } finally {
+        if (connection) connection.release();
+    }
+}
 
-const providers = [
-    'https://eth-mainnet.g.alchemy.com/v2/l2vP2jWVn5GXemM54j4HgJQMjMkv9llV',
-    'https://mainnet.infura.io/v3/f2f27632352546e19b5a27d2f7be2ee1',
-    'https://eth-mainnet.g.alchemy.com/v2/wWnKdcZV4LkHCgJdJKiwY7MiDrH6zyJN',
-    'https://eth-mainnet.g.alchemy.com/v2/xrVK352FsLCuyBCRhN6YUKVrANu_lAfW',
-    'https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8'
-];
+initializeDatabase();
+
+const providers = process.env.PROVIDERS.split(',');
 
 let providerIndex = 0;
 let web3;
-//const provider = new Web3.providers.HttpProvider('https://mainnet.infura.io/v3/a676cba70f654892b17f7b957b0af2f8');
-//const web3 = new Web3(provider);
 
 async function connectToWeb3Provider() {
     try {
@@ -80,10 +111,10 @@ async function connectToWeb3Provider() {
         await web3.eth.net.getId();
         console.log(`Connected to Ethereum network using provider: ${selectedProvider}`);
     } catch (error) {
-        console.error(`Failed to connect to provider ${providers[providerIndex]}:`, error);
-        // Переходим к следующему провайдеру
+        logError(`Failed to connect to provider ${providers[providerIndex]}:`, error);
+        //Go to the next provider
         providerIndex = (providerIndex + 1) % providers.length;
-        await connectToWeb3Provider(); // Рекурсивно пытаемся подключиться к следующему провайдеру
+        await connectToWeb3Provider(); // Recursively try to connect to the next ISP
     }
 }
 
@@ -102,36 +133,63 @@ const cvxToUsdtPath = [contractsLib.CVX,contractsLib.WETH,contractsLib.USDT];
 
 async function getWalletData(walletAddress_) {
     if (!walletAddress_) {
-        throw new Error("walletAddress is not defined");
+        throw new Error("\nwalletAddress is not defined");
     }
     const walletAddress = normalizeAddress(walletAddress_);
-    console.log('Normalized Address:', walletAddress);
+    console.log('\nNormalized Address     :', walletAddress);
 
     let ratioUser_ = 0; // Установите значение по умолчанию на случай ошибки
 
     try {
         ratioUser_ = await ratioContract.methods.calculateLpRatio(walletAddress).call();
+        console.log('ratioUser_:',ratioUser_);
     } catch (error) {
-        console.error("Error occurred while fetching ratio:", error);
+        logError("Error occurred while fetching ratio:", error);
         ratioUser_ = 0; // Установка значения 0 в случае ошибки
+        console.log('ratioUser_:',ratioUser_);
+    }
+
+    if (ratioUser_ === 0) {
+        logWarning("userDeposits       USDT: 0");
+        logWarning("dsfLpBalance     DSF LP: 0");
+        logWarning("ratioUser             %: 0");
+        logWarning("availableWithdraw  USDT: 0");
+        logWarning("cvxShare            CVX: 0");
+        logWarning("cvxCost            USDT: 0");
+        logWarning("crvShare            CRV: 0");
+        logWarning("crvCost            USDT: 0");
+        return {
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0
+        };
     }
 
     let availableToWithdraw_;
 
     try {
         availableToWithdraw_ = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call();
+        console.log('availableToWithdraw_:',availableToWithdraw_);
     } catch (error) {
-        console.error("Error occurred while fetching available to withdraw:", error);
+        logError("Error occurred while fetching available to withdraw:", error);
         availableToWithdraw_ = 0; // Установка значения 0 в случае ошибки
+        console.log('availableToWithdraw_:',availableToWithdraw_);
     }
 
     let dsfLpBalance_;
 
     try {
         dsfLpBalance_ = await contractDSF.methods.balanceOf(walletAddress).call();
+        console.log('dsfLpBalance_:',dsfLpBalance_);
     } catch (error) {
-        console.error("Error occurred while fetching DSF LP balance:", error);
+        logError("Error occurred while fetching DSF LP balance:", error);
         dsfLpBalance_ = 0; // Установка значения 0 в случае ошибки
+        console.log('dsfLpBalance_:',dsfLpBalance_);
     }
 
     try {
@@ -139,16 +197,27 @@ async function getWalletData(walletAddress_) {
         const dsfLpBalance = (Number(dsfLpBalance_) / 1e18).toPrecision(18);
 
         const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
+        console.log('response:',response.data);
         const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
+        console.log('userDeposits:',userDeposits);
         const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
+        console.log('crvEarned:',crvEarned);
         const cvxTotalCliffs = await config_cvxContract.methods.totalCliffs().call();
+        console.log('cvxTotalCliffs:',cvxTotalCliffs);
         const cvx_totalSupply = await config_cvxContract.methods.totalSupply().call();
+        console.log('cvx_totalSupply:',cvx_totalSupply);
         const cvx_reductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
+        console.log('cvx_reductionPerCliff:',cvx_reductionPerCliff);
         const cvx_balanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        console.log('cvx_balanceOf:',cvx_balanceOf);
         const crv_balanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        console.log('crv_balanceOf:',crv_balanceOf);
         const cvxRemainCliffs = cvxTotalCliffs - cvx_totalSupply / cvx_reductionPerCliff;
+        console.log('cvxRemainCliffs:',cvxRemainCliffs);
         const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvx_balanceOf;
+        console.log('amountInCVX:',amountInCVX);
         const amountInCRV = crvEarned + crv_balanceOf;
+        console.log('amountInCRV:',amountInCRV);
         
         let crvShare = 0;
         let cvxShare = 0;
@@ -157,30 +226,37 @@ async function getWalletData(walletAddress_) {
 
         const crvShare_ = Math.trunc(Number(amountInCRV) * Number(ratioUser_) / 1e18 * 0.85); // ratioUser_ CRV
         const cvxShare_ = Math.trunc(Number(amountInCVX) * Number(ratioUser_) / 1e18 * 0.85); // ratioUser_ CVX
+        console.log('crvShare_:',crvShare_);
 
         if (crvShare_ > 20000 && cvxShare_ > 20000) {
             const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
             const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
-
+            console.log('crvCost_Array:',crvCost_Array);
             crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
+            console.log('crvCost:',crvCost);
             cvxCost = Number(cvxCost_Array[cvxCost_Array.length - 1]) / 1e6;
+            console.log('cvxCost:',cvxCost);
 
             crvShare = Number(crvShare_) / 1e18;
             cvxShare = Number(cvxShare_) / 1e18;
+            console.log('cvxShare:',cvxShare);
         } 
 
         const ratioUser = parseFloat(ratioUser_) / 1e16;
+        console.log('ratioUser:',ratioUser);
         const safeRatioUser = (ratioUser ? parseFloat(ratioUser) : 0.0).toPrecision(16);
+        console.log('safeRatioUser:',safeRatioUser);
+        
 
-        console.log("response            : " + response);
-        console.log("userDeposits        : " + userDeposits);
-        console.log("dsfLpBalance        : " + dsfLpBalance);
-        console.log("ratioUser           : " + safeRatioUser + " " + ratioUser_);
-        console.log("availableToWithdraw : " + availableToWithdraw);
-        console.log("cvxShare            : " + cvxShare);
-        console.log("cvxCost in USDT     : " + cvxCost);
-        console.log("crvShare            : " + crvShare);
-        console.log("crvCost in USDT     : " + crvCost);
+        //console.log("response               : " + response);
+        console.log("userDeposits       USDT: " + userDeposits);
+        console.log("dsfLpBalance     DSF LP: " + dsfLpBalance);
+        console.log("ratioUser             %: " + safeRatioUser);
+        console.log("availableWithdraw  USDT: " + availableToWithdraw);
+        console.log("cvxShare            CVX: " + cvxShare);
+        console.log("cvxCost            USDT: " + cvxCost);
+        console.log("crvShare            CRV: " + crvShare);
+        console.log("crvCost            USDT: " + crvCost);
 
         return {
             userDeposits,
@@ -193,9 +269,165 @@ async function getWalletData(walletAddress_) {
             crvCost
         };
     } catch (error) {
-        console.error('Error retrieving data for wallet:', walletAddress, error);
-        ratioUser_ = 0; 
-        throw error; // Проброс ошибки для дальнейшей обработки
+        logError('Error retrieving data for wallet:', walletAddress, error);
+        logWarning("userDeposits       USDT: 0");
+        logWarning("dsfLpBalance     DSF LP: 0");
+        logWarning("ratioUser             %: 0");
+        logWarning("availableWithdraw  USDT: 0");
+        logWarning("cvxShare            CVX: 0");
+        logWarning("cvxCost            USDT: 0");
+        logWarning("crvShare            CRV: 0");
+        logWarning("crvCost            USDT: 0");
+        return {
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0
+        };
+    }
+}
+
+async function getWalletDataOptim(walletAddress_, cachedData) {
+    if (!walletAddress_) {
+        throw new Error("\nwalletAddress is not defined");
+    }
+    const walletAddress = normalizeAddress(walletAddress_);
+    console.log('\nNormalized Address     :', walletAddress);
+
+    let ratioUser_ = 0;
+
+    try {
+        ratioUser_ = await ratioContract.methods.calculateLpRatio(walletAddress).call();
+        //console.log('ratioUser_:', ratioUser_);
+    } catch (error) {
+        logError("Error occurred while fetching ratio"); //, error);
+        ratioUser_ = 0;
+        //console.log('ratioUser_:', ratioUser_);
+    }
+
+    if (ratioUser_ === 0) {
+        logWarning("userDeposits       USDT: 0");
+        logWarning("dsfLpBalance     DSF LP: 0");
+        logWarning("ratioUser             %: 0");
+        logWarning("availableWithdraw  USDT: 0");
+        logWarning("cvxShare            CVX: 0");
+        logWarning("cvxCost            USDT: 0");
+        logWarning("crvShare            CRV: 0");
+        logWarning("crvCost            USDT: 0");
+        return {
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0
+        };
+    }
+
+    let availableToWithdraw_;
+
+    try {
+        availableToWithdraw_ = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call();
+        //console.log('availableToWithdraw_:', availableToWithdraw_);
+    } catch (error) {
+        logError("Error occurred while fetching available to withdraw"); //, error);
+        availableToWithdraw_ = 0;
+        //console.log('availableToWithdraw_:', availableToWithdraw_);
+    }
+
+    let dsfLpBalance_;
+
+    try {
+        dsfLpBalance_ = await contractDSF.methods.balanceOf(walletAddress).call();
+        //console.log('dsfLpBalance_:', dsfLpBalance_);
+    } catch (error) {
+        logError("Error occurred while fetching DSF LP balance"); //, error);
+        dsfLpBalance_ = 0;
+        //console.log('dsfLpBalance_:', dsfLpBalance_);
+    }
+
+    try {
+        const availableToWithdraw = Number(availableToWithdraw_) / 1e6;
+        const dsfLpBalance = (Number(dsfLpBalance_) / 1e18).toPrecision(18);
+
+        const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
+        //console.log('response:', response.data);
+        const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
+        //console.log('userDeposits:', userDeposits);
+
+        let crvShare = 0;
+        let cvxShare = 0;
+        let crvCost = 0;
+        let cvxCost = 0;
+
+        const crvShare_ = Math.trunc(Number(cachedData.amountInCRV) * Number(ratioUser_) / 1e18 * 0.85);
+        const cvxShare_ = Math.trunc(Number(cachedData.amountInCVX) * Number(ratioUser_) / 1e18 * 0.85);
+        //console.log('crvShare_:', crvShare_);
+
+        if (crvShare_ > 20000 && cvxShare_ > 20000) {
+            const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
+            const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
+            //console.log('crvCost_Array:', crvCost_Array);
+            crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
+            //console.log('crvCost:', crvCost);
+            cvxCost = Number(cvxCost_Array[cvxCost_Array.length - 1]) / 1e6;
+            //console.log('cvxCost:', cvxCost);
+
+            crvShare = Number(crvShare_) / 1e18;
+            cvxShare = Number(cvxShare_) / 1e18;
+            //console.log('cvxShare:', cvxShare);
+        }
+
+        const ratioUser = parseFloat(ratioUser_) / 1e16;
+        //console.log('ratioUser:', ratioUser);
+        const safeRatioUser = (ratioUser ? parseFloat(ratioUser) : 0.0).toPrecision(16);
+        //console.log('safeRatioUser:', safeRatioUser);
+
+        //console.log("response               : " + response);
+        console.log("userDeposits       USDT: " + userDeposits);
+        console.log("dsfLpBalance     DSF LP: " + dsfLpBalance);
+        console.log("ratioUser             %: " + safeRatioUser);
+        console.log("availableWithdraw  USDT: " + availableToWithdraw);
+        console.log("cvxShare            CVX: " + cvxShare);
+        console.log("cvxCost            USDT: " + cvxCost);
+        console.log("crvShare            CRV: " + crvShare);
+        console.log("crvCost            USDT: " + crvCost);
+        return {
+            userDeposits,
+            dsfLpBalance,
+            safeRatioUser,
+            availableToWithdraw,
+            cvxShare,
+            cvxCost,
+            crvShare,
+            crvCost
+        };
+    } catch (error) {
+        logError('Error retrieving data for wallet:', walletAddress, error);
+        logWarning("userDeposits       USDT: 0");
+        logWarning("dsfLpBalance     DSF LP: 0");
+        logWarning("ratioUser             %: 0");
+        logWarning("availableWithdraw  USDT: 0");
+        logWarning("cvxShare            CVX: 0");
+        logWarning("cvxCost            USDT: 0");
+        logWarning("crvShare            CRV: 0");
+        logWarning("crvCost            USDT: 0");
+        return {
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0
+        };
     }
 }
 
@@ -219,18 +451,32 @@ function serializeBigints(obj) {
 }
 
 app.get('/wallet/:walletAddress', async (req, res) => {
+
+    connectToWeb3Provider();
+
     const walletAddress_ = req.params.walletAddress.toLowerCase();
+    
     const walletAddress = normalizeAddress(walletAddress_);
-        console.log('Normalized Address:', walletAddress);
+    console.log('\nNormalized Address     :', walletAddress);
+
+    
+        if (!/^(0x)?[0-9a-f]{40}$/i.test(walletAddress)) {
+            console.log("Адрес не соответствует ожидаемому формату.");
+        } else {
+            console.log("Адрес соответствует ожидаемому формату.");
+        }
+    
         
-    let connection;
-    //const walletAddress = req.params.walletAddress.toLowerCase();
     //let connection;
+    //const walletAddress = req.params.walletAddress.toLowerCase();
+    let connection;
+
+    connection = await pool.getConnection();
+    //console.log(connection);
 
     try {
         // Получаем соединение с базой данных
-        connection = await pool.getConnection();
-        console.log(connection);
+        
         
         // Проверяем наличие кошелька в базе данных
         const [rows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
@@ -238,6 +484,7 @@ app.get('/wallet/:walletAddress', async (req, res) => {
         
         if (rows.length === 0) {
             // Если кошелек не найден, получаем данные и сохраняем их
+            console.log("Получаем данные кошелька");
             try {
                 const walletData = await getWalletData(walletAddress);
                 const insertQuery = `
@@ -270,16 +517,17 @@ app.get('/wallet/:walletAddress', async (req, res) => {
                 res.json(serializedData); // Отправка сериализованных данных
             } catch (error) {
                 // Логируем ошибку и отправляем ответ сервера
-                console.error('Failed to retrieve or insert wallet data:', error);
+                logError('Failed to retrieve or insert wallet data:', error);
                 res.status(500).send('Internal Server Error');
             }
         } else {
             // Если данные уже есть, возвращаем их
+            console.log("Данные кошелька уже есть");
             res.json(rows[0]);
         }
     } catch (error) {
         // Обработка ошибок при соединении или выполнении SQL-запроса
-        console.error('Database connection or operation failed:', error);
+        logError('Database connection or operation failed:', error);
         res.status(500).send('Internal Server Error');
     } finally {
         // Освобождение соединения
@@ -294,15 +542,13 @@ cron.schedule('0 */3 * * *', async () => {
     updateAllWallets(); // Вызов функции обновления всех кошельков
 });
 
-async function updateWalletData(walletAddress) {
+async function updateWalletData(walletAddress, cachedData) {
     let connection;
     try {
         // Получение данных кошелька
-        const walletData = await getWalletData(walletAddress);
-        
+        const walletData = await getWalletDataOptim(walletAddress, cachedData);
         // Получение соединения с базой данных
         connection = await pool.getConnection();
-        
         // Запрос на обновление данных в базе данных
         const updateQuery = `
             UPDATE wallet_info SET
@@ -335,7 +581,7 @@ async function updateWalletData(walletAddress) {
         await connection.query(updateQuery, values);
         console.log(`Data updated for wallet: ${walletAddress}`);
     } catch (error) {
-        console.error(`Error updating wallet data for ${walletAddress}:`, error);
+        logError(`Error updating wallet data for ${walletAddress}:`, error);
         throw error;
     } finally {
         // Освобождение соединения
@@ -343,13 +589,17 @@ async function updateWalletData(walletAddress) {
     }
 }
 
-app.post('/api/update/:walletAddress', async (req, res) => {
-    const walletAddress = req.params.walletAddress.toLowerCase();
+app.post('/update/:walletAddress', async (req, res) => {
+    const walletAddress_ = req.params.walletAddress.toLowerCase();
+    if (!walletAddress_) {
+        throw new Error("\nwalletAddress is not defined");
+    }
+    const walletAddress = normalizeAddress(walletAddress_);
     try {
         await updateWalletData(walletAddress);
         res.send({ message: 'Data updated successfully' });
     } catch (error) {
-        console.error('Failed to update data:', error);
+        logError('Failed to update data:', error);
         res.status(500).send('Failed to update wallet data');
     }
 });
@@ -360,80 +610,40 @@ async function updateAllWallets() {
         connection = await pool.getConnection();
         const [wallets] = await connection.query('SELECT wallet_address FROM wallet_info');
         console.log(wallets);
+
+        // Получаем общие данные один раз
+        const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
+        const cvxTotalCliffs = await config_cvxContract.methods.totalCliffs().call();
+        const cvx_totalSupply = await config_cvxContract.methods.totalSupply().call();
+        const cvx_reductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
+        const cvx_balanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const crv_balanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const cvxRemainCliffs = cvxTotalCliffs - cvx_totalSupply / cvx_reductionPerCliff;
+        const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvx_balanceOf;
+        const amountInCRV = crvEarned + crv_balanceOf;
+
+        const cachedData = {
+            crvEarned,
+            cvxTotalCliffs,
+            cvx_totalSupply,
+            cvx_reductionPerCliff,
+            cvx_balanceOf,
+            crv_balanceOf,
+            cvxRemainCliffs,
+            amountInCRV,
+            amountInCVX
+        };
+        console.log('cachedData : ', cachedData);
         for (const wallet of wallets) {
-            await updateWalletData(wallet.wallet_address);
+            await updateWalletData(wallet.wallet_address, cachedData);
         }
-        console.log('All wallet data updated successfully.');
+        console.log('\nAll wallet data updated successfully.');
     } catch (error) {
-        console.error('Error during initial wallet data update:', error);
+        logError('\nError during initial wallet data update:', error);
     } finally {
         if (connection) connection.release();
     }
 }
-
-app.get('/add/:walletAddress', async (req, res) => {
-    const walletAddress = req.params.walletAddress.toLowerCase();
-    let connection;
-
-    try {
-        // Получаем соединение с базой данных
-        connection = await pool.getConnection();
-        
-        // Проверяем наличие кошелька в базе данных
-        const [rows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
-
-        if (rows.length === 0) {
-            // Если кошелек не найден, получаем данные и сохраняем их
-            try {
-                const walletData = await getWalletData(walletAddress);
-                const insertQuery = `
-                    INSERT INTO wallet_info (
-                        wallet_address,
-                        user_deposits,
-                        dsf_lp_balance,
-                        ratio_user,
-                        available_to_withdraw,
-                        cvx_share,
-                        cvx_cost,
-                        crv_share,
-                        crv_cost,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                `;
-                await connection.query(insertQuery, [
-                    walletAddress,
-                    walletData.userDeposits,
-                    walletData.dsfLpBalance,
-                    walletData.safeRatioUser,
-                    walletData.availableToWithdraw,
-                    walletData.cvxShare,
-                    walletData.cvxCost,
-                    walletData.crvShare,
-                    walletData.crvCost
-                ]);
-                // Отправляем полученные данные клиенту
-                const serializedData = serializeBigints(walletData); // Сериализация данных
-                res.json(serializedData); // Отправка сериализованных данных
-            } catch (error) {
-                // Логируем ошибку и отправляем ответ сервера
-                console.error('Failed to retrieve or insert wallet data:', error);
-                res.status(500).send('Internal Server Error');
-            }
-        } else {
-            // Если данные уже есть, возвращаем их
-            res.json(rows[0]);
-        }
-    } catch (error) {
-        // Обработка ошибок при соединении или выполнении SQL-запроса
-        console.error('Database connection or operation failed:', error);
-        res.status(500).send('Internal Server Error');
-    } finally {
-        // Освобождение соединения
-        if (connection) {
-            connection.release();
-        }
-    }
-});
 
 app.get('/wallets', async (req, res) => {
     let connection;
@@ -449,7 +659,7 @@ app.get('/wallets', async (req, res) => {
         res.json(rows);
     } catch (error) {
         // Обработка ошибок при соединении или выполнении SQL-запроса
-        console.error('Database connection or operation failed:', error);
+        logError('Database connection or operation failed:', error);
         res.status(500).send('Internal Server Error');
     } finally {
         // Освобождение соединения
@@ -461,8 +671,21 @@ app.get('/wallets', async (req, res) => {
 
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
-  console.log(`Server is listening on port ${port}`);
-  updateAllWallets();
+    console.log(`
+
+    ▄▄▄▄▄▄▄▄▄      ▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄▄▄▄  
+    ███▀▀▀▀███▄  ▄██▀▀▀▀███▄  ███▀▀▀▀▀▀▀▀
+    ███     ███  ██▄     ▀▀▀  ███    
+    ███     ███   ▀███████▄   █████████
+    ███     ███  ▄▄▄     ▀██  ███    
+    ███▄▄▄▄███▀  ▀██▄▄▄▄▄██▀  ███    
+    ▀▀▀▀▀▀▀▀▀      ▀▀▀▀▀▀▀    ▀▀▀
+
+    --- Defining  Successful  Future ---
+ 
+    `);
+    console.log(`Server is listening on port ${port}`);
+    updateAllWallets();
 });
 
 // Увеличение таймаута соединения
