@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -31,9 +32,31 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
+// Настройка CORS
+const corsOptions = {
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            /^https:\/\/(?:.*\.)?dsf\.finance$/,
+            'https://dsf-dapp-mk2.vercel.app'
+        ];
+        if (allowedOrigins.some(pattern => pattern.test(origin))) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+
 const colors = {
     red: '\x1b[31m',
     yellow: '\x1b[33m',
+    green: '\x1b[32m',
+    blue: '\x1b[34m',
     reset: '\x1b[0m'
 };
 
@@ -43,6 +66,14 @@ function logError(message) {
 
 function logWarning(message) {
     console.warn(`${colors.yellow}${message}${colors.reset}`);
+}
+
+function logSuccess(message) {
+    console.log(`${colors.green}${message}${colors.reset}`);
+}
+
+function logInfo(message) {
+    console.log(`${colors.blue}${message}${colors.reset}`);
 }
 
 // Middleware to redirect HTTP to HTTPS
@@ -62,6 +93,11 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// For RESTART DataBase apy_info: 
+// const dropTableQuery = `DROP TABLE IF EXISTS apy_info;`;
+//         await pool.query(dropTableQuery);
+//         console.log('Таблица успешно удалена');
 
 // For RESTART DataBase : 
 // const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
