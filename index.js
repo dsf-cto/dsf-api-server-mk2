@@ -34,17 +34,18 @@ app.use(limiter);
 
 // Настройка CORS
 const corsOptions = {
-    origin: (origin, callback) => {
-        const allowedOrigins = [
-            /^https:\/\/(?:.*\.)?dsf\.finance$/,
-            'https://dsf-dapp-mk2.vercel.app'
-        ];
-        if (allowedOrigins.some(pattern => pattern.test(origin))) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
+    origin: '*', // Разрешить доступ всем источникам
+    // origin: (origin, callback) => {
+    //     const allowedOrigins = [
+    //         /^https:\/\/(?:.*\.)?dsf\.finance$/,
+    //         'https://dsf-dapp-mk2.vercel.app'
+    //     ];
+    //     if (allowedOrigins.some(pattern => pattern.test(origin))) {
+    //         callback(null, true);
+    //     } else {
+    //         callback(new Error('Not allowed by CORS'));
+    //     }
+    // },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
