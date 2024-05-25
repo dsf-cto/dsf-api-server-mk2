@@ -706,19 +706,15 @@ app.get('/wallets', async (req, res) => {
 
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
-    logInfo(`
-
-    ▄▄▄▄▄▄▄▄▄      ▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄▄▄▄  
-    ███▀▀▀▀███▄  ▄██▀▀▀▀███▄  ███▀▀▀▀▀▀▀▀
-    ███     ███  ██▄     ▀▀▀  ███    
-    ███     ███   ▀███████▄   █████████
-    ███     ███  ▄▄▄     ▀██  ███    
-    ███▄▄▄▄███▀  ▀██▄▄▄▄▄██▀  ███    
-    ▀▀▀▀▀▀▀▀▀      ▀▀▀▀▀▀▀    ▀▀▀
-
-    --- Defining  Successful  Future ---
- 
-    `);
+    
+        console.log(`\n${colors.blue}${`    ▄▄▄▄▄▄▄▄▄      ▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄▄▄▄ `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ███▀▀▀▀███▄  ▄██▀▀▀▀███▄  ███▀▀▀▀▀▀▀▀ `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ███     ███  ██▄     ▀▀▀  ███         `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ███     ███   ▀███████▄   █████████   `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ███     ███  ▄▄▄     ▀██  ███         `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ███▄▄▄▄███▀  ▀██▄▄▄▄▄██▀  ███         `}${colors.reset}`);
+    console.log(`${colors.blue}${`    ▀▀▀▀▀▀▀▀▀      ▀▀▀▀▀▀▀    ▀▀▀         `}${colors.reset}`);
+    console.log(`\n${colors.blue}${`    --- Defining  Successful  Future --- `}${colors.reset}\n`);
     logWarning(`Server is listening on port ${port}`);
     updateAllWallets();
 });
