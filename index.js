@@ -513,8 +513,6 @@ app.get('/wallet/:walletAddress', async (req, res) => {
 
     try {
         // Получаем соединение с базой данных
-        
-        
         // Проверяем наличие кошелька в базе данных
         const [rows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
         console.log("Rows from database:", rows);
@@ -674,7 +672,7 @@ async function updateAllWallets() {
         for (const wallet of wallets) {
             await updateWalletData(wallet.wallet_address, cachedData);
         }
-        console.log('\nAll wallet data updated successfully.');
+        logSuccess('\nAll wallet data updated successfully.');
     } catch (error) {
         logError('\nError during initial wallet data update:', error);
     } finally {
@@ -708,7 +706,7 @@ app.get('/wallets', async (req, res) => {
 
 const port = process.env.PORT || 3000;
 const server = app.listen(port, () => {
-    console.log(`
+    logInfo(`
 
     ▄▄▄▄▄▄▄▄▄      ▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄▄▄▄  
     ███▀▀▀▀███▄  ▄██▀▀▀▀███▄  ███▀▀▀▀▀▀▀▀
@@ -721,7 +719,7 @@ const server = app.listen(port, () => {
     --- Defining  Successful  Future ---
  
     `);
-    console.log(`Server is listening on port ${port}`);
+    logWarning(`Server is listening on port ${port}`);
     updateAllWallets();
 });
 
