@@ -486,6 +486,22 @@ app.get('/wallet/:walletAddress', async (req, res) => {
     const walletAddress_ = req.params.walletAddress.toLowerCase();
     
     const walletAddress = normalizeAddress(walletAddress_);
+
+    // Если адрес некорректный, возвращаем значения по умолчанию
+    if (!walletAddress) {
+        logError('Invalid wallet address:', walletAddress_);
+        return res.json({
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0
+        });
+    }
+    
     console.log('\nNormalized Address     :', walletAddress);
 
     
