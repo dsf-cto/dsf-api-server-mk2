@@ -224,7 +224,16 @@ async function getWalletData(walletAddress_) {
 
         const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
         console.log('response:',response.data);
-        const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
+        //const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound); // Сумма значений
+
+        
+        let userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
+
+        if (walletAddress  === "0x9Af20CCf97b53BC40B1741D44C5AD34f28eE4CE7" || walletAddress  === "0x9af20ccf97b53bc40b1741d44c5ad34f28ee4ce7") {
+            userDeposits = Number(24175.14);
+        } //------------------------------------------------------------------------------------------------------------
+
+        
         console.log('userDeposits:',userDeposits);
         const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
         console.log('crvEarned:',crvEarned);
@@ -384,8 +393,16 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
 
         const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
         //console.log('response:', response.data);
-        const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
+        
+        //const userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
         //console.log('userDeposits:', userDeposits);
+
+        let userDeposits = Number(response.data.beforeCompound) + Number(response.data.afterCompound);
+
+        if (walletAddress  === "0x9Af20CCf97b53BC40B1741D44C5AD34f28eE4CE7" || walletAddress  === "0x9af20ccf97b53bc40b1741d44c5ad34f28ee4ce7") {
+            userDeposits = Number(24175.14);
+        } //------------------------------------------------------------------------------------------------------------
+
 
         let crvShare = 0;
         let cvxShare = 0;
