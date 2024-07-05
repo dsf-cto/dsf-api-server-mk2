@@ -392,7 +392,9 @@ async function connectToWeb3Provider() {
 
 connectToWeb3Provider();
 
-const etherscanApiKeys = process.env.ETHERSCAN_API_KEYS.split(',');
+const etherscanApiKeys = process.env.ETHERSCAN_API_KEYS 
+    ? process.env.ETHERSCAN_API_KEYS.split(',')
+    : [];
 
 let etherscanApiKeyIndex = 0;
 
@@ -797,6 +799,9 @@ async function calculateCurrentDeposit(walletAddress) {
             logInfo(`Processing event: ${event.event} - ${event.transactionHash}`);
 
             if (event.event === 'Deposited') {
+                
+                if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+
                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
                 const [withdrawRecords] = await connection.query(
                     `SELECT availableToWithdraw FROM availableToWithdraw 
@@ -815,6 +820,9 @@ async function calculateCurrentDeposit(walletAddress) {
                 totalLpShares += parseFloat(returnValues.lpShares);
                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}`);
             } else if (event.event === 'Transfer') {
+
+                if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+
                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
                 const [withdrawRecords] = await connection.query(
                     `SELECT availableToWithdraw FROM availableToWithdraw 
@@ -830,6 +838,10 @@ async function calculateCurrentDeposit(walletAddress) {
                 if (returnValues.from === walletAddress) {
                     totalDepositedUSD -= usdValue;
                     totalLpShares -= lpValue;
+
+                    if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+                    if (totalLpShares < 0) totalLpShares = 0; // Защита от отрицательных значений
+
                     logInfo(`Transfer - Sent: ${usdValue} USD, ${lpValue} LP`);
                 } else if (returnValues.to === walletAddress) {
                     totalDepositedUSD += usdValue;
@@ -856,6 +868,10 @@ async function calculateCurrentDeposit(walletAddress) {
                     totalDepositedUSD -= withdrawnUSD;
                     logInfo(`Withdrawn - Calculated value: ${withdrawnUSD}`);
                 }
+
+                if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+                if (totalLpShares < 0) totalLpShares = 0; // Защита от отрицательных значений
+
                 totalLpShares -= withdrawnLpShares;
                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}`);
             }
@@ -873,97 +889,9 @@ async function calculateCurrentDeposit(walletAddress) {
 
 // Функция для расчета средневзвешенной ставки дохода
 // async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
-//     let connection;
-//     try {
-//         connection = await pool.getConnection();
 
-//         // Получаем все события Deposited для данного кошелька
-        
-//         const [depositedEvents] = await connection.query(
-//             `SELECT * FROM contract_events 
-//              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
-//              AND event = 'Deposited' 
-//              ORDER BY eventDate ASC`,
-//             [walletAddress]
-//         );
+//     logWarning(`calculateWeightedYieldRate`);
 
-//         if (depositedEvents.length === 0) {
-//             logInfo(`No Deposited events found for depositor: ${walletAddress}`);
-//             return;
-//         }
-
-//         let totalDepositedUSD = 0; // Общая сумма всех депозитов в USD
-//         let weightedDepositDays = 0; // Общая сумма произведений количества дней и депозита
-//         const currentDate = new Date(); // Текущая дата
-//         let totalEarnings = availableToWithdraw + cvxCost + crvCost - userDeposits; // Общая сумма заработка
-
-//         // Проходим по всем событиям Deposited
-//         for (const event of depositedEvents) {
-//             let returnValues = event.returnValues;
-
-//             // Проверка, если returnValues - строка, тогда парсинг
-//             if (typeof returnValues === 'string') {
-//                 try {
-//                     returnValues = JSON.parse(returnValues);
-//                 } catch (error) {
-//                     console.error(`Failed to parse returnValues for event: ${event.transactionHash}`, error);
-//                     continue;
-//                 }
-//             }
-
-//             const eventDate = new Date(event.eventDate); // Дата события
-//             const daysActive = Math.floor((currentDate - eventDate) / (1000 * 60 * 60 * 24)); // Количество дней с даты события
-
-//             // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
-//             const [withdrawRecords] = await connection.query(
-//                 `SELECT availableToWithdraw FROM availableToWithdraw 
-//                  WHERE transactionHash = ? AND event = 'Deposited'`,
-//                 [event.transactionHash]
-//             );
-
-//             let depositedUSD = 0;
-
-//             if (withdrawRecords.length > 0) {
-//                 depositedUSD = parseFloat(withdrawRecords[0].availableToWithdraw); // Используем availableToWithdraw, если есть
-//             } else {
-//                 // Рассчитываем сумму депозита как сумму всех трех токенов (DAI, USDC, USDT)
-//                 depositedUSD = (parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT)) * 0.84;
-//             }
-
-//             totalDepositedUSD += depositedUSD; // Добавляем депозит к общей сумме
-//             weightedDepositDays += daysActive * depositedUSD; // Добавляем произведение дней и депозита к общей сумме
-//         }
-
-//         // Взвешенные депозито-дни
-//         const totalWeightedDepositDays = weightedDepositDays;
-
-//         // Средняя дневная ставка
-//         const averageDailyRate = totalWeightedDepositDays === 0 ? 0 : totalEarnings / totalWeightedDepositDays;
-
-//         // Средняя годовая ставка
-//         const annualYieldRate = averageDailyRate * 365 * 100;
-
-//         // Вставляем или обновляем запись в таблице weighted_yield_rate
-//         const insertQuery = `
-//             INSERT INTO weighted_yield_rate (depositor_address, date, weighted_yield_rate, total_deposit)
-//             VALUES (?, ?, ?, ?)
-//             ON DUPLICATE KEY UPDATE
-//             weighted_yield_rate = VALUES(weighted_yield_rate),
-//             total_deposit = VALUES(total_deposit)
-//         `;
-//         await connection.query(insertQuery, [walletAddress, currentDate.toISOString().split('T')[0], annualYieldRate, availableToWithdraw + cvxCost + crvCost]);
-//         logInfo(`Inserted/Updated weighted yield rate for ${walletAddress} on ${currentDate.toISOString().split('T')[0]}`);
-        
-//         return annualYieldRate; // Возвращаем рассчитанную средневзвешенную годовую ставку дохода
-        
-//     } catch (error) {
-//         logError("Failed to calculate weighted yield rate:", error);
-//         return null;
-//     } finally {
-//         if (connection) connection.release();
-//     }
-// }
-// async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
 //     let connection;
 //     try {
 //         connection = await pool.getConnection();
@@ -978,7 +906,7 @@ async function calculateCurrentDeposit(walletAddress) {
 //         );
 
 //         if (events.length === 0) {
-//             logInfo(`No events found for depositor: ${walletAddress}`);
+//             logInfo(`События не найдены для депозитора: ${walletAddress}`);
 //             return 0;
 //         }
 
@@ -994,7 +922,7 @@ async function calculateCurrentDeposit(walletAddress) {
 //                 try {
 //                     returnValues = JSON.parse(returnValues);
 //                 } catch (error) {
-//                     console.error(`Failed to parse returnValues for event: ${event.transactionHash}`, error);
+//                     console.error(`Не удалось разобрать returnValues для события: ${event.transactionHash}`, error);
 //                     continue;
 //                 }
 //             }
@@ -1002,10 +930,13 @@ async function calculateCurrentDeposit(walletAddress) {
 //             const eventDate = new Date(event.eventDate);
 //             const eventDateOnly = eventDate.toISOString().split('T')[0];
 
-//             logInfo(`Processing event: ${event.event} - ${event.transactionHash}`);
+//             logInfo(`Обработка события: ${event.event} - ${event.transactionHash} на ${eventDateOnly}`);
 
 //             let depositedUSD = 0;
 //             if (event.event === 'Deposited' || (event.event === 'Transfer' && returnValues.to === walletAddress)) {
+                
+//                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+                
 //                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
 //                 const [withdrawRecords] = await connection.query(
 //                     `SELECT availableToWithdraw FROM availableToWithdraw 
@@ -1015,42 +946,95 @@ async function calculateCurrentDeposit(walletAddress) {
 
 //                 if (withdrawRecords.length > 0) {
 //                     depositedUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
-//                     logInfo(`${event.event} - Using availableToWithdraw value: ${withdrawRecords[0].availableToWithdraw}`);
+//                     logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
 //                 } else {
 //                     if (event.event === 'Deposited') {
 //                         depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
 //                         depositedUSD -= depositedUSD * 0.0016; // Вычитаем 0.16% из суммы депозита
+//                         logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD} после вычета 0.16%`);
 //                     } else {
 //                         depositedUSD = parseFloat(returnValues.usdValue);
+//                         logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD}`);
 //                     }
-//                     logInfo(`${event.event} - Calculated value: ${depositedUSD}`);
 //                 }
 
 //                 // Если это не первое событие, добавляем взвешенное количество дней депозита
 //                 if (lastEventDate) {
 //                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
 //                     weightedDepositDays += totalDepositedUSD * daysActive;
+//                     logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
 //                 }
 
-//                 totalDepositedUSD += depositedUSD; // Добавляем депозит к общей сумме
+//                 totalDepositedUSD += depositedUSD; // Обновляем общую сумму депозита
 //                 lastEventDate = eventDate; // Обновляем дату последнего события
-//                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, weightedDepositDays: ${weightedDepositDays}`);
-//             }
-//         }
+//                 logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита: ${weightedDepositDays}`);
+//             } else if (event.event === 'Withdrawn' || (event.event === 'Transfer' && returnValues.from === walletAddress)) {
+//                 // Если это событие вывода или трансфера средств от пользователя
+//                 let withdrawnUSD = 0;
+            
+//                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
+//                 const [withdrawRecords] = await connection.query(
+//                     `SELECT availableToWithdraw FROM availableToWithdraw 
+//                      WHERE transactionHash = ? AND event = ?`,
+//                     [event.transactionHash, event.event]
+//                 );
+            
+//                 if (withdrawRecords.length > 0) {
+//                     withdrawnUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
+//                     logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
+//                 } else {
+//                     withdrawnUSD = parseFloat(returnValues.usdValue);
+//                     logInfo(`${event.event} - Рассчитанная сумма: ${withdrawnUSD}`);
+//                 }
+            
+//                 // Если это не первое событие, добавляем взвешенное количество дней депозита для суммы на счету до события вывода
+//                 if (lastEventDate) {
+//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+//                     weightedDepositDays += totalDepositedUSD * daysActive;
+//                     logInfo(`Withdrawn - Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+//                 }
+            
+//                 // Вычитаем взвешенные дни депозита для выведенных средств
+//                 if (lastEventDate) {
+//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+//                     weightedDepositDays -= withdrawnUSD * daysActive;
+//                     logInfo(`Withdrawn - Вычтено ${daysActive} активных дней для withdrawnUSD: ${withdrawnUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+//                 }
+            
+//                 totalDepositedUSD -= withdrawnUSD; // Обновляем общую сумму депозита
+//                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+            
+//                 // Обнуление взвешенных дней, если депозит стал равен нулю
+//                 if (totalDepositedUSD === 0) {
+//                     weightedDepositDays = 0;
+//                     logInfo(`Депозит стал равен нулю, обнуляем взвешенные дни депозита.`);
+//                 }
+
+//                 lastEventDate = eventDate; // Обновляем дату последнего события
+//                 logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита: ${weightedDepositDays}`);
+//             }            
+//         } 
 
 //         // Добавляем текущие взвешенные дни депозита до текущей даты
 //         if (lastEventDate) {
 //             const daysActive = (new Date() - lastEventDate) / (1000 * 60 * 60 * 24);
 //             weightedDepositDays += totalDepositedUSD * daysActive;
+//             logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD} до сегодняшнего дня, взвешенные дни депозита теперь: ${weightedDepositDays}`);
 //         }
 
-//         const totalValue = availableToWithdraw + cvxCost + crvCost;
+//         const totalValue = availableToWithdraw + cvxCost + crvCost - userDeposits;
+//         logInfo(`Общая сумма из availableToWithdraw, cvxCost и crvCost - userDeposits: ${totalValue}`);
+
 //         if (weightedDepositDays === 0) {
+//             logWarning(`Взвешенные дни депозита равны нулю, возвращаем 0 для ${walletAddress}`);
 //             return 0;
 //         }
 
 //         const averageDailyRate = totalValue / weightedDepositDays;
 //         const annualYieldRate = averageDailyRate * 365 * 100;
+
+//         logInfo(`Средняя дневная ставка: ${averageDailyRate}`);
+//         logInfo(`Рассчитанная годовая доходность: ${annualYieldRate}`);
 
 //         // Вставляем или обновляем запись для текущего депозитора и даты
 //         const insertQuery = `
@@ -1062,134 +1046,17 @@ async function calculateCurrentDeposit(walletAddress) {
 //             annual_apy = VALUES(annual_apy)
 //         `;
 //         await connection.query(insertQuery, [walletAddress, new Date(), totalValue, averageDailyRate, annualYieldRate]);
-//         logInfo(`Inserted/Updated weighted yield rate for ${walletAddress} on ${new Date().toISOString().split('T')[0]}`);
+//         logInfo(`Вставлено/обновлено взвешенная ставка доходности для ${walletAddress} на ${new Date().toISOString().split('T')[0]}`);
 
 //         return annualYieldRate;
 //     } catch (error) {
-//         logError("Failed to calculate weighted yield rate:", error);
+//         logError("Не удалось рассчитать взвешенную ставку доходности:", error);
 //         return 0;
 //     } finally {
 //         if (connection) connection.release();
 //     }
 // }
-// async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
-//     let connection;
-//     try {
-//         connection = await pool.getConnection();
 
-//         // Получаем все события для данного депозитора
-//         const [events] = await connection.query(
-//             `SELECT * FROM contract_events 
-//              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
-//                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
-//              ORDER BY eventDate ASC`,
-//             [walletAddress, walletAddress]
-//         );
-
-//         if (events.length === 0) {
-//             logInfo(`No events found for depositor: ${walletAddress}`);
-//             return 0;
-//         }
-
-//         let totalDepositedUSD = 0;
-//         let weightedDepositDays = 0;
-//         let lastEventDate = null;
-
-//         for (const event of events) {
-//             let returnValues = event.returnValues;
-
-//             // Проверка, если returnValues - строка, тогда парсинг
-//             if (typeof returnValues === 'string') {
-//                 try {
-//                     returnValues = JSON.parse(returnValues);
-//                 } catch (error) {
-//                     console.error(`Failed to parse returnValues for event: ${event.transactionHash}`, error);
-//                     continue;
-//                 }
-//             }
-
-//             const eventDate = new Date(event.eventDate);
-//             const eventDateOnly = eventDate.toISOString().split('T')[0];
-
-//             logInfo(`Processing event: ${event.event} - ${event.transactionHash} on ${eventDateOnly}`);
-
-//             let depositedUSD = 0;
-//             if (event.event === 'Deposited' || (event.event === 'Transfer' && returnValues.to === walletAddress)) {
-//                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
-//                 const [withdrawRecords] = await connection.query(
-//                     `SELECT availableToWithdraw FROM availableToWithdraw 
-//                      WHERE transactionHash = ? AND event = ?`,
-//                     [event.transactionHash, event.event]
-//                 );
-
-//                 if (withdrawRecords.length > 0) {
-//                     depositedUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
-//                     logInfo(`${event.event} - Using availableToWithdraw value: ${withdrawRecords[0].availableToWithdraw}`);
-//                 } else {
-//                     if (event.event === 'Deposited') {
-//                         depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
-//                         depositedUSD -= depositedUSD * 0.0016; // Вычитаем 0.16% из суммы депозита
-//                         logInfo(`${event.event} - Calculated value: ${depositedUSD} after subtracting 0.16%`);
-//                     } else {
-//                         depositedUSD = parseFloat(returnValues.usdValue);
-//                         logInfo(`${event.event} - Calculated value: ${depositedUSD}`);
-//                     }
-//                 }
-
-//                 // Если это не первое событие, добавляем взвешенное количество дней депозита
-//                 if (lastEventDate) {
-//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
-//                     weightedDepositDays += totalDepositedUSD * daysActive;
-//                     logInfo(`Added ${daysActive} days active for totalDepositedUSD: ${totalDepositedUSD}, weightedDepositDays now: ${weightedDepositDays}`);
-//                 }
-
-//                 totalDepositedUSD += depositedUSD; // Добавляем депозит к общей сумме
-//                 lastEventDate = eventDate; // Обновляем дату последнего события
-//                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, weightedDepositDays: ${weightedDepositDays}`);
-//             }
-//         }
-
-//         // Добавляем текущие взвешенные дни депозита до текущей даты
-//         if (lastEventDate) {
-//             const daysActive = (new Date() - lastEventDate) / (1000 * 60 * 60 * 24);
-//             weightedDepositDays += totalDepositedUSD * daysActive;
-//             logInfo(`Added ${daysActive} days active for totalDepositedUSD: ${totalDepositedUSD} till today, weightedDepositDays now: ${weightedDepositDays}`);
-//         }
-
-//         const totalValue = availableToWithdraw + cvxCost + crvCost;
-//         logInfo(`Total value from availableToWithdraw, cvxCost, and crvCost: ${totalValue}`);
-
-//         if (weightedDepositDays === 0) {
-//             logWarning(`Weighted deposit days are zero, returning 0 for ${walletAddress}`);
-//             return 0;
-//         }
-
-//         const averageDailyRate = totalValue / weightedDepositDays;
-//         const annualYieldRate = averageDailyRate * 365 * 100;
-
-//         logInfo(`Average daily rate: ${averageDailyRate}`);
-//         logInfo(`Calculated annual yield rate: ${annualYieldRate}`);
-
-//         // Вставляем или обновляем запись для текущего депозитора и даты
-//         const insertQuery = `
-//             INSERT INTO personal_yield_rate (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
-//             VALUES (?, ?, ?, ?, ?)
-//             ON DUPLICATE KEY UPDATE
-//             daily_income = VALUES(daily_income),
-//             daily_yield_rate = VALUES(daily_yield_rate),
-//             annual_apy = VALUES(annual_apy)
-//         `;
-//         await connection.query(insertQuery, [walletAddress, new Date(), totalValue, averageDailyRate, annualYieldRate]);
-//         logInfo(`Inserted/Updated weighted yield rate for ${walletAddress} on ${new Date().toISOString().split('T')[0]}`);
-
-//         return annualYieldRate;
-//     } catch (error) {
-//         logError("Failed to calculate weighted yield rate:", error);
-//         return 0;
-//     } finally {
-//         if (connection) connection.release();
-//     }
-// }
 async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
     let connection;
     try {
@@ -1198,10 +1065,12 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
         // Получаем все события для данного депозитора
         const [events] = await connection.query(
             `SELECT * FROM contract_events 
-             WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
+             WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.from')) = ? 
+                OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
+                OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.withdrawer')) = ? 
              ORDER BY eventDate ASC`,
-            [walletAddress, walletAddress]
+            [walletAddress, walletAddress, walletAddress, walletAddress]
         );
 
         if (events.length === 0) {
@@ -1210,6 +1079,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
         }
 
         let totalDepositedUSD = 0;
+        let totalLpShares = 0;
         let weightedDepositDays = 0;
         let lastEventDate = null;
 
@@ -1232,44 +1102,129 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
             logInfo(`Обработка события: ${event.event} - ${event.transactionHash} на ${eventDateOnly}`);
 
             let depositedUSD = 0;
-            if (event.event === 'Deposited' || (event.event === 'Transfer' && returnValues.to === walletAddress)) {
+            if (event.event === 'Deposited') {
                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
                 const [withdrawRecords] = await connection.query(
                     `SELECT availableToWithdraw FROM availableToWithdraw 
-                     WHERE transactionHash = ? AND event = ?`,
-                    [event.transactionHash, event.event]
+                     WHERE transactionHash = ? AND event = 'Deposited'`,
+                    [event.transactionHash]
                 );
 
                 if (withdrawRecords.length > 0) {
                     depositedUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
                     logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
                 } else {
-                    if (event.event === 'Deposited') {
-                        depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
-                        depositedUSD -= depositedUSD * 0.0016; // Вычитаем 0.16% из суммы депозита
-                        logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD} после вычета 0.16%`);
-                    } else {
-                        depositedUSD = parseFloat(returnValues.usdValue);
-                        logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD}`);
-                    }
+                    depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
+                    depositedUSD -= depositedUSD * 0.0016; // Вычитаем 0.16% из суммы депозита
+                    logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD} после вычета 0.16%`);
                 }
 
-                // Если это не первое событие, добавляем взвешенное количество дней депозита
                 if (lastEventDate) {
                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
                     weightedDepositDays += totalDepositedUSD * daysActive;
                     logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
                 }
 
-                //totalDepositedUSD += depositedUSD; // Добавляем депозит к общей сумме
-                totalDepositedUSD = userDeposits;
-                lastEventDate = eventDate; // Обновляем дату последнего события
-                logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита: ${weightedDepositDays}`);
+                totalDepositedUSD += depositedUSD;
+                totalLpShares += parseFloat(returnValues.lpShares);
+                lastEventDate = eventDate;
+                logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}, взвешенные дни депозита: ${weightedDepositDays}`);
+            } else if (event.event === 'Transfer') {
+                let usdValue = 0;
+                const lpValue = parseFloat(returnValues.value);
+
+                // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
+                const [withdrawRecords] = await connection.query(
+                    `SELECT availableToWithdraw FROM availableToWithdraw 
+                     WHERE transactionHash = ? AND event = 'Transfer'`,
+                    [event.transactionHash]
+                );
+
+                usdValue = withdrawRecords.length > 0 
+                    ? parseFloat(withdrawRecords[0].availableToWithdraw) 
+                    : parseFloat(returnValues.usdValue);
+
+                if (returnValues.from === walletAddress) {
+                    if (lastEventDate) {
+                        const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+                        weightedDepositDays += totalDepositedUSD * daysActive;
+                        logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+                    }
+
+                    totalDepositedUSD -= usdValue;
+                    totalLpShares -= lpValue;
+
+                    if (totalDepositedUSD < 0) totalDepositedUSD = 0;
+                    if (totalLpShares < 0) totalLpShares = 0;
+
+                    if (lastEventDate) {
+                        const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+                        weightedDepositDays -= usdValue * daysActive;
+                        logInfo(`Вычтено ${daysActive} активных дней для withdrawnUSD: ${usdValue}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+                    }
+                    logInfo(`Transfer - Sent: ${usdValue} USD, ${lpValue} LP`);
+                } else if (returnValues.to === walletAddress) {
+                    if (lastEventDate) {
+                        const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+                        weightedDepositDays += totalDepositedUSD * daysActive;
+                        logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+                    }
+
+                    totalDepositedUSD += usdValue;
+                    totalLpShares += lpValue;
+                    logInfo(`Transfer - Received: ${usdValue} USD, ${lpValue} LP`);
+                }
+                lastEventDate = eventDate;
+                logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}, взвешенные дни депозита: ${weightedDepositDays}`);
+            } else if (event.event === 'Withdrawn') {
+                let withdrawnUSD = 0;
+                const withdrawnLpShares = parseFloat(returnValues.lpShares);
+                const sharePercentage = withdrawnLpShares / totalLpShares;
+
+                const [withdrawRecords] = await connection.query(
+                    `SELECT availableToWithdraw FROM availableToWithdraw 
+                     WHERE transactionHash = ? AND event = 'Withdrawn'`,
+                    [event.transactionHash]
+                );
+
+                if (withdrawRecords.length > 0) {
+                    withdrawnUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
+                    logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
+                } else {
+                    withdrawnUSD = totalDepositedUSD * sharePercentage;
+                    logInfo(`${event.event} - Рассчитанная сумма: ${withdrawnUSD}`);
+                }
+
+                if (lastEventDate) {
+                    const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+                    weightedDepositDays += totalDepositedUSD * daysActive;
+                    logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+                }
+
+                totalDepositedUSD -= withdrawnUSD;
+                totalLpShares -= withdrawnLpShares;
+
+                if (totalDepositedUSD < 0) totalDepositedUSD = 0;
+                if (totalLpShares < 0) totalLpShares = 0;
+
+                if (lastEventDate) {
+                    const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
+                    weightedDepositDays -= withdrawnUSD * daysActive;
+                    logInfo(`Вычтено ${daysActive} активных дней для withdrawnUSD: ${withdrawnUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
+                }
+
+                if (totalDepositedUSD === 0) {
+                    weightedDepositDays = 0;
+                    logInfo(`Депозит стал равен нулю, обнуляем взвешенные дни депозита.`);
+                }
+
+                lastEventDate = eventDate;
+                logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}, взвешенные дни депозита: ${weightedDepositDays}`);
             }
         }
 
         // Добавляем текущие взвешенные дни депозита до текущей даты
-        if (lastEventDate) {
+        if (lastEventDate && totalDepositedUSD > 0) {
             const daysActive = (new Date() - lastEventDate) / (1000 * 60 * 60 * 24);
             weightedDepositDays += totalDepositedUSD * daysActive;
             logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD} до сегодняшнего дня, взвешенные дни депозита теперь: ${weightedDepositDays}`);
@@ -1303,7 +1258,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
 
         return annualYieldRate;
     } catch (error) {
-        logError("Не удалось рассчитать взвешенную ставку доходности:", error);
+        logError(`Не удалось рассчитать взвешенную ставку доходности: ${error}`);
         return 0;
     } finally {
         if (connection) connection.release();
@@ -1487,14 +1442,14 @@ async function updateWalletData(walletAddress, cachedData) {
         // Получение данных кошелька
         const walletData = await getWalletDataOptim(walletAddress, cachedData);
 
-        console.log(`Retrieved walletData: ${walletData}`);
+        //console.log(`Retrieved walletData: ${walletData}`);
 
         // Проверяем, что получены корректные данные
         if (!walletData || typeof walletData !== 'object') {
             throw new Error('Invalid wallet data retrieved');
         }
 
-        console.log('Retrieved walletData:', JSON.stringify(walletData));
+        //console.log('Retrieved walletData:', JSON.stringify(walletData));
 
         // Получение соединения с базой данных
         connection = await pool.getConnection();
@@ -1570,8 +1525,8 @@ async function updateWalletData(walletAddress, cachedData) {
                 walletAddress
             ];
 
-            console.log('Update query:', updateQuery);
-            console.log('Update values:', updateValues);
+            //console.log('Update query:', updateQuery);
+            //console.log('Update values:', updateValues);
 
             // Выполнение запроса обновления
             await connection.query(updateQuery, updateValues);
@@ -2219,12 +2174,16 @@ async function checkForNewEvents() {
         while (fromBlock <= latestBlock) {
             const toBlock = fromBlock + BigInt(10) <= latestBlock ? fromBlock + BigInt(9999) : latestBlock;
 
-            for (let block = fromBlock; block <= toBlock; block++) {
-                console.log(`Checking block ${block}`);
-            }
+            console.log(`Checking blocks from ${fromBlock} to ${toBlock}`);
 
             const events = await fetchEventsWithRetry(fromBlock, toBlock);
-            await storeEvents(events, true); // Передаем true, чтобы указывать, что это новые события
+
+            if (events.length > 0) {
+                await storeEvents(events, true); // Сохраняем новые события в базе данных. Передаем true, чтобы указывать, что это новые события 
+                await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
+                await updateAllWallets(); // Обновляем все кошельки
+            }
+            
             fromBlock = toBlock + BigInt(1);
         }
 
@@ -3053,7 +3012,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    //setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
