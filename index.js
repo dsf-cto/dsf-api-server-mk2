@@ -2991,7 +2991,7 @@ const updateAllData = async () => {
         //logSuccess("Wallets updated successfully.");
 
         // Проверка на упущенные Events
-        await initializeMissingEvents().catch(console.error);
+        ///await initializeMissingEvents().catch(console.error);
     } catch (error) {
         logError(`Failed to update all data: ${error}`);
     }
@@ -3012,7 +3012,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    ///setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
