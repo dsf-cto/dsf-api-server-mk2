@@ -28,6 +28,9 @@ import { sendMessageToChat } from './utils/bots/telegramBotEvets.mjs';
 
 const app = express();
 
+// Параметр `trust proxy` в true
+app.set('trust proxy', true);
+
 // Ограничение частоты запросов
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 минут
@@ -425,7 +428,6 @@ async function initializeWeightedYieldRateTable() {
 
 initializeWeightedYieldRateTable();
 
-// уже не нужна, удалить
 // Таблица personal_yield_rate для хранения персональной ставки доходности
 const createPersonalYieldRateTableQuery = `
     CREATE TABLE IF NOT EXISTS personal_yield_rate (
@@ -1406,8 +1408,9 @@ async function calculateSavingsAndSpending(wallet) {
         console.log(`Total ETH pending: ${totalEthPending}, Total USD pending: ${totalUsdPending}`);
 
         // Вычисление сэкономленных средств
-        const totalEthSaved = totalEthOptimized - totalEthPending;
-        const totalUsdSaved = totalUsdOptimized - totalUsdPending;
+        const totalEthSaved = Math.max(totalEthOptimized - totalEthPending, 0.0);
+        const totalUsdSaved = Math.max(totalUsdOptimized - totalUsdPending, 0.0);
+
         console.log(`Total ETH saved: ${totalEthSaved}, Total USD saved: ${totalUsdSaved}`);
 
         const resultSavingsAndSpending = {
@@ -1442,10 +1445,10 @@ async function calculateTotalSavingsAndSpending() {
         connection = await pool.getConnection();
         const [rows] = await connection.query(query);
 
-        const totalEthSpent = rows[0].totalEthSpent || 0.0;
-        const totalUsdSpent = rows[0].totalUsdSpent || 0.0;
-        const totalEthSaved = rows[0].totalEthSaved || 0.0;
-        const totalUsdSaved = rows[0].totalUsdSaved || 0.0;
+        const totalEthSpent = Math.max(rows[0].totalEthSpent || 0.0, 0.0);
+        const totalUsdSpent = Math.max(rows[0].totalUsdSpent || 0.0, 0.0);
+        const totalEthSaved = Math.max(rows[0].totalEthSaved || 0.0, 0.0);
+        const totalUsdSaved = Math.max(rows[0].totalUsdSaved || 0.0, 0.0);
 
         return {
             totalEthSpent,
@@ -1460,7 +1463,6 @@ async function calculateTotalSavingsAndSpending() {
         if (connection) connection.release();
     }
 }
-
 
 // Для getWalletDataOptim
 async function updateWalletData(walletAddress, cachedData) {
@@ -2160,30 +2162,6 @@ async function insertEvent(event) {
 //
 //
 
-// Функция для получения номера блока по дате
-async function getBlockNumberByDate(date) {
-    const timestamp = Math.floor(date.getTime() / 1000);
-
-    const response = await retryEtherscan(async () => {
-        const apiKey = getNextEtherscanApiKey();
-        return await axios.get(`https://api.etherscan.io/api`, {
-            params: {
-                module: 'block',
-                action: 'getblocknobytime',
-                timestamp: timestamp,
-                closest: 'before',
-                apikey: apiKey  // Используем переключение API ключей
-            }
-        });
-    });
-
-    if (response.data && response.data.result) {
-        return BigInt(response.data.result);
-    } else {
-        throw new Error('Failed to get block number by date from Etherscan');
-    }
-}
-
 // Функция для получения исторического курса ETH/USD с Etherscan
 async function getEthUsdPrice(date) {
     const maxRetries = 5;
@@ -2191,7 +2169,6 @@ async function getEthUsdPrice(date) {
 
     while (retries < maxRetries) {
         try {
-
             const response = await retryEtherscan(async () => {
                 const apiKey = getNextEtherscanApiKey();
                 return await axios.get(`https://api.etherscan.io/api`, {
@@ -2400,8 +2377,9 @@ async function checkForNewEvents() {
     
         if (newEventsFetched) {
             logSuccess('New events found, updating unique depositors and wallets.');
-            
-            //await missingCheckForEvernts() // проверяем блок на упущенные события
+
+            // тестирую
+            await missingCheckForEvernts() // проверяем блок на упущенные события 
 
             await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
             await updateAllWallets(); // Обновляем все кошельки
@@ -2574,7 +2552,7 @@ async function storeEvents(events, isNewEvents = false) {
     }
 }
 
-// тест
+// тест processEvent
 async function processEvent(event, isNewEvents) {
     const block = await web3.eth.getBlock(event.blockNumber);
     const eventDate = new Date(Number(block.timestamp) * 1000);
@@ -2669,7 +2647,7 @@ async function processEvent(event, isNewEvents) {
             };
 
             if (initializationTelegramBotEvents) {
-                const message = `Event 'Deposited' ${transactionsD_status} detected!
+                const message = `Event 'Deposited ${transactionsD_status}' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
                     \nWallet : ${event.returnValues.depositor}
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
@@ -2706,7 +2684,7 @@ async function processEvent(event, isNewEvents) {
                 };
 
                 if (initializationTelegramBotEvents) {
-                    const message = `Event 'Withdrawn' ${transactionsW_status} detected!
+                    const message = `Event 'Withdrawn ${transactionsW_status}' detected!
                         \nURL    : https://etherscan.io/tx/${event.transactionHash}
                         \nWallet : ${event.returnValues.withdrawer}
                         \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
@@ -2733,7 +2711,7 @@ async function processEvent(event, isNewEvents) {
             };
 
             if (initializationTelegramBotEvents) {
-                const message = `Event 'FailedDeposit' ${transactionsFD_status} detected!
+                const message = `Event 'FailedDeposit ${transactionsFD_status}' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
                     \nWallet : ${event.returnValues.depositor}
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
@@ -2760,7 +2738,7 @@ async function processEvent(event, isNewEvents) {
             };
 
             if (initializationTelegramBotEvents) {
-                const message = `Event 'FailedWithdrawal' ${transactionsFW_status} detected!
+                const message = `Event 'FailedWithdrawal ${transactionsFW_status}' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
                     \nWallet : ${event.returnValues.withdrawer}
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
@@ -3395,54 +3373,66 @@ app.get('/wallets-apy/:walletAddress', async (req, res) => {
 
 // Функция для получения всех транзакций DAI по указанному адресу
 async function getDAITransactions(address) {
+    try {    
+        const response = await retryEtherscan(async () => {
+            const apiKey = getNextEtherscanApiKey();
+            const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0x6B175474E89094C44Da98b954EedeAC495271d0F&apikey=${apiKey}`;
+            return await axios.get(url);
+        });
         
-    const response = await retryEtherscan(async () => {
-        const apiKey = getNextEtherscanApiKey();
-        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0x6B175474E89094C44Da98b954EedeAC495271d0F&apikey=${apiKey}`;
-        return await axios.get(url);
-    });
-    
-    if (response.data.status === '1' && response.data.message === 'OK') {
-        //console.log(`DAI transactions for address ${address}`, response.data.result);
-        return response.data.result;
-    } else {
-        console.warn(`No DAI transactions found for address ${address}`);
+        if (response.data.status === '1' && response.data.message === 'OK') {
+            //console.log(`DAI transactions for address ${address}`, response.data.result);
+            return response.data.result;
+        } else {
+            console.warn(`No DAI transactions found for address ${address}`);
+            return [];
+        }
+    } catch (error) {
+        console.error(`Failed to get DAI transactions for address ${address}: ${error.message}`);
         return [];
     }
 }
 
 // Функция для получения всех транзакций USDC по указанному адресу
 async function getUSDCTransactions(address) {
+    try {    
+        const response = await retryEtherscan(async () => {
+            const apiKey = getNextEtherscanApiKey();
+            const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&apikey=${apiKey}`;
+            return await axios.get(url);
+        });
         
-    const response = await retryEtherscan(async () => {
-        const apiKey = getNextEtherscanApiKey();
-        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&apikey=${apiKey}`;
-        return await axios.get(url);
-    });
-    
-    if (response.data.status === '1' && response.data.message === 'OK') {
-        //console.log(`USDC transactions for address ${address}`, response.data.result);
-        return response.data.result;
-    } else {
-        console.warn(`No USDC transactions found for address ${address}`);
+        if (response.data.status === '1' && response.data.message === 'OK') {
+            //console.log(`USDC transactions for address ${address}`, response.data.result);
+            return response.data.result;
+        } else {
+            console.warn(`No USDC transactions found for address ${address}`);
+            return [];
+        }
+    } catch (error) {
+        console.error(`Failed to get USDС transactions for address ${address}: ${error.message}`);
         return [];
     }
 }
 
 // Функция для получения всех транзакций USDT по указанному адресу
 async function getUSDTTransactions(address) {
+    try {        
+        const response = await retryEtherscan(async () => {
+            const apiKey = getNextEtherscanApiKey();
+            const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xdac17f958d2ee523a2206206994597c13d831ec7&apikey=${apiKey}`;
+            return await axios.get(url);
+        });
         
-    const response = await retryEtherscan(async () => {
-        const apiKey = getNextEtherscanApiKey();
-        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xdac17f958d2ee523a2206206994597c13d831ec7&apikey=${apiKey}`;
-        return await axios.get(url);
-    });
-    
-    if (response.data.status === '1' && response.data.message === 'OK') {
-        //console.log(`USDT transactions for address ${address}`, response.data.result);
-        return response.data.result;
-    } else {
-        console.warn(`No USDT transactions found for address ${address}`);
+        if (response.data.status === '1' && response.data.message === 'OK') {
+            //console.log(`USDT transactions for address ${address}`, response.data.result);
+            return response.data.result;
+        } else {
+            console.warn(`No USDT transactions found for address ${address}`);
+            return [];
+        }
+    } catch (error) {
+        console.error(`Failed to get USDT transactions for address ${address}: ${error.message}`);
         return [];
     }
 }
@@ -3595,17 +3585,26 @@ app.get('/usdt/:address/:blockNumber', async (req, res) => {
 
 // Функция для получения всех транзакций по указанному адресу и блоку
 async function getTransactionsByAddressAndBlock(address, blockNumber) {
+    try {
+        const response = await retryEtherscan(async () => {
+            const apiKey = getNextEtherscanApiKey();
+            const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=${blockNumber}&endblock=${blockNumber}&sort=asc&apikey=${apiKey}`;
+            
+            console.log(url)
+            
+            return await axios.get(url);
+        });
 
-    const response = await retryEtherscan(async () => {
-        const apiKey = getNextEtherscanApiKey();
-        const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=${blockNumber}&endblock=${blockNumber}&sort=asc&apikey=${apiKey}`;
-        return await axios.get(url);
-    });
+        logWarning(`response ${response}`);
 
-    if (response.data.status === '1' && response.data.message === 'OK') {
-        return response.data.result;
-    } else {
-        console.warn(`No transactions found for address ${address} in block ${blockNumber}`);
+        if (response.data.status === '1' && response.data.message === 'OK') {
+            return response.data.result;
+        } else {
+            console.warn(`No transactions found for address ${address} in block ${blockNumber}`);
+            return [];
+        }
+    } catch (error) {
+        console.error(`Failed to get transactions for address ${address} in block ${blockNumber}: ${error.message}`);
         return [];
     }
 }
@@ -3613,6 +3612,9 @@ async function getTransactionsByAddressAndBlock(address, blockNumber) {
 // Функция для получения всех транзакций с участием одного адреса в указанном блоке
 async function showBlockTransactions(address, blockNumber) {
     try {
+
+        logWarning(`address ${address}, blockNumber ${blockNumber}`);
+
         // Получаем все транзакции для данного адреса и блока
         const transactions = await getTransactionsByAddressAndBlock(address, blockNumber);
 
@@ -3881,21 +3883,6 @@ app.get('/api/incomDSFfromEveryOne/:wallet', async (req, res) => {
 });
 
 
-// Эндпоинт для получения суммы incomeDSF
-app.get('/api/incomDSFfromEveryOne/total', async (req, res) => {
-    try {
-        const query = `SELECT SUM(incomeDSF) as totalIncomeDSF FROM incomDSFfromEveryOne`;
-        const [rows] = await pool.query(query);
-        const totalIncomeDSF = rows[0].totalIncomeDSF || 0;
-        console.log(`Fetched total incomeDSF: ${totalIncomeDSF}`);
-        res.json({ totalIncomeDSF });
-    } catch (error) {
-        console.error(`Failed to fetch total incomeDSF: ${error.message}`);
-        res.status(500).send('Failed to fetch data');
-    }
-});
-
-
 //
 //
 //
@@ -3913,23 +3900,23 @@ const updateAllData = async () => {
         await checkAllApiKeys();
 
         // Проверка на упущенные Events
-        ///await initializeMissingEvents().catch(console.error);
+        await initializeMissingEvents().catch(console.error);
 
         // Инициализация таблицы и заполнение уникальными депозиторами
-        ///await populateUniqueDepositors();
+        await populateUniqueDepositors();
 
         //await updateApyData();
         //logSuccess("APY data updated successfully.");
 
         // Расчет персональных APY
         //await calculatePersonalYieldRate();
-
+        
         // Обновление данныхкошельков
-        ///await updateAllWallets();
+        await updateAllWallets();
         //logSuccess("Wallets updated successfully.");
 
         // Расчет доходов DSF с каждого кошелька
-        ///await calculateIncomeDSF();
+        await calculateIncomeDSF();
 
         initializationTelegramBotEvents = true;
         initializationCompleted = true;
@@ -3955,7 +3942,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    ///setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
