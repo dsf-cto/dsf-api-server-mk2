@@ -1426,6 +1426,41 @@ async function calculateSavingsAndSpending(wallet) {
     }
 }
 
+// Функция для вычисления потраченных и сэкономленных средств кошелька, суммарных данных по всем кошелькам
+async function calculateTotalSavingsAndSpending() {
+    const query = `
+        SELECT 
+            SUM(JSON_EXTRACT(wallet_info, '$.eth_spent')) AS totalEthSpent,
+            SUM(JSON_EXTRACT(wallet_info, '$.usd_spent')) AS totalUsdSpent,
+            SUM(JSON_EXTRACT(wallet_info, '$.eth_saved')) AS totalEthSaved,
+            SUM(JSON_EXTRACT(wallet_info, '$.usd_saved')) AS totalUsdSaved
+        FROM wallet_info
+    `;
+
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        const [rows] = await connection.query(query);
+
+        const totalEthSpent = rows[0].totalEthSpent || 0.0;
+        const totalUsdSpent = rows[0].totalUsdSpent || 0.0;
+        const totalEthSaved = rows[0].totalEthSaved || 0.0;
+        const totalUsdSaved = rows[0].totalUsdSaved || 0.0;
+
+        return {
+            totalEthSpent,
+            totalUsdSpent,
+            totalEthSaved,
+            totalUsdSaved
+        };
+    } catch (error) {
+        console.error('Failed to calculate total savings and spending:', error);
+        throw new Error('Failed to calculate total savings and spending');
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
 // Для getWalletDataOptim
 async function updateWalletData(walletAddress, cachedData) {
     let connection;
@@ -1727,6 +1762,17 @@ app.get('/wallet/savings/:wallet', async (req, res) => {
     } catch (error) {
         console.error(`Failed to calculate savings and spending for wallet ${wallet}: ${error.message}`);
         res.status(500).send('Failed to calculate savings and spending');
+    }
+});
+
+// Эндпоинт для получения суммарных данных о потраченных и сэкономленных средствах со всех кошельков
+app.get('/wallet/total-savings', async (req, res) => {
+    try {
+        const resultTotalSavingsAndSpending = await calculateTotalSavingsAndSpending();
+        res.json(resultTotalSavingsAndSpending);
+    } catch (error) {
+        console.error(`Failed to calculate total savings and spending: ${error.message}`);
+        res.status(500).send('Failed to calculate total savings and spending');
     }
 });
 
