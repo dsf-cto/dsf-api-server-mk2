@@ -2256,6 +2256,39 @@ async function initializeMissingEvents() {
     }
 }
 
+// Функция для начальной инициализации отсутствующих событий, начиная с (blockNumber - 1) 
+// Для поиска пропущеных событий при оптимизированных транзакциях
+async function missingCheckForEvernts() {
+    try {
+        console.log('Additional block check...');
+
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
+        const [rows] = await pool.query(lastEventBlockQuery);
+        const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
+
+        const latestBlock = await fetchLatestBlockFromEtherscan();
+
+        if (lastEventBlock >= latestBlock) {
+            console.log(`No new blocks to process.`);
+            return;
+        }
+
+        // Начинаем с предыдущего блока
+        let fromBlock = lastEventBlock - BigInt(1);
+        if (fromBlock < 0) {
+            fromBlock = BigInt(0); // Убедитесь, что fromBlock не меньше 0
+        }
+        const toBlock = latestBlock;
+
+        const events = await fetchEventsUsingWeb3(fromBlock, toBlock);
+        await storeEvents(events);
+
+        //console.log(`Fetched and stored missing events up to block ${latestBlock}.`);
+    } catch (error) {
+        logError(`Failed to initialize missing events: ${error}`);
+    }
+}
+
 //New2
 // Функция для записи последнего проверенного блока в базу данных
 async function updateLastCheckedBlock(blockNumber) {
@@ -2367,6 +2400,9 @@ async function checkForNewEvents() {
     
         if (newEventsFetched) {
             logSuccess('New events found, updating unique depositors and wallets.');
+            
+            await missingCheckForEvernts() // проверяем блок на упущенные события
+
             await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
             await updateAllWallets(); // Обновляем все кошельки
         }
@@ -2585,9 +2621,7 @@ async function processEvent(event, isNewEvents) {
             if (initializationTelegramBotEvents) {
                 const message = `Event 'CreatedPendingDeposit' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nWallet : ${event.returnValues.depositor}
-                    \n
                     \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
                     \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
                     \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
@@ -2610,11 +2644,8 @@ async function processEvent(event, isNewEvents) {
             if (initializationTelegramBotEvents) {
                 const message = `Event 'CreatedPendingWithdrawal' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nWallet : ${event.returnValues.withdrawer}
-                    \n
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
-                    \n
                     \nDAI    : ${formatBigInt(event.returnValues.tokenAmounts[0], 18)}
                     \nUSDC   : ${formatBigInt(event.returnValues.tokenAmounts[1], 6)}
                     \nUSDT   : ${formatBigInt(event.returnValues.tokenAmounts[2], 6)}`;
@@ -2640,11 +2671,8 @@ async function processEvent(event, isNewEvents) {
             if (initializationTelegramBotEvents) {
                 const message = `Event 'Deposited' ${transactionsD_status} detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nWallet : ${event.returnValues.depositor}
-                    \n
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
-                    \n
                     \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
                     \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
                     \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
@@ -2680,11 +2708,8 @@ async function processEvent(event, isNewEvents) {
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'Withdrawn' ${transactionsW_status} detected!
                         \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                        \n
                         \nWallet : ${event.returnValues.withdrawer}
-                        \n
                         \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
-                        \n
                         \nDAI    : ${realWithdrawnDAI}
                         \nUSDC   : ${realWithdrawnUSDC}
                         \nUSDT   : ${realWithdrawnUSDT}`;
@@ -2710,11 +2735,8 @@ async function processEvent(event, isNewEvents) {
             if (initializationTelegramBotEvents) {
                 const message = `Event 'FailedDeposit' ${transactionsFD_status} detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nWallet : ${event.returnValues.depositor}
-                    \n
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
-                    \n
                     \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
                     \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
                     \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
@@ -2740,11 +2762,8 @@ async function processEvent(event, isNewEvents) {
             if (initializationTelegramBotEvents) {
                 const message = `Event 'FailedWithdrawal' ${transactionsFW_status} detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nWallet : ${event.returnValues.withdrawer}
-                    \n
                     \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
-                    \n
                     \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
                     \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
                     \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
@@ -2770,7 +2789,6 @@ async function processEvent(event, isNewEvents) {
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'AutoCompoundAll' detected!
                         \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                        \n
                         \nIncome : ${Number(balanceDifference)}`;
                     console.log(message);
                     sendMessageToChat(message);
@@ -2785,7 +2803,6 @@ async function processEvent(event, isNewEvents) {
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'ClaimedAllManagementFee' detected!
                         \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                        \n
                         \nFee    : ${formatBigInt(event.returnValues.feeValue, 6)}`;
                     console.log(message);
                     sendMessageToChat(message);
@@ -2824,10 +2841,8 @@ async function processEvent(event, isNewEvents) {
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'Transfer' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
-                    \n
                     \nFrom   : ${event.returnValues.from}
                     \nTo     : ${event.returnValues.to}
-                    \n
                     \nDSF LP : ${formatBigInt(event.returnValues.value, 18)}`;
                     console.log(message);
                     sendMessageToChat(message);
