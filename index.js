@@ -2401,7 +2401,7 @@ async function checkForNewEvents() {
         if (newEventsFetched) {
             logSuccess('New events found, updating unique depositors and wallets.');
             
-            await missingCheckForEvernts() // проверяем блок на упущенные события
+            //await missingCheckForEvernts() // проверяем блок на упущенные события
 
             await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
             await updateAllWallets(); // Обновляем все кошельки
