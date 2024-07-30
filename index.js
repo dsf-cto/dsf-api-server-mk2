@@ -3913,10 +3913,10 @@ const updateAllData = async () => {
         await checkAllApiKeys();
 
         // Проверка на упущенные Events
-        await initializeMissingEvents().catch(console.error);
+        ///await initializeMissingEvents().catch(console.error);
 
         // Инициализация таблицы и заполнение уникальными депозиторами
-        await populateUniqueDepositors();
+        ///await populateUniqueDepositors();
 
         //await updateApyData();
         //logSuccess("APY data updated successfully.");
@@ -3925,11 +3925,11 @@ const updateAllData = async () => {
         //await calculatePersonalYieldRate();
 
         // Обновление данныхкошельков
-        await updateAllWallets();
+        ///await updateAllWallets();
         //logSuccess("Wallets updated successfully.");
 
         // Расчет доходов DSF с каждого кошелька
-        await calculateIncomeDSF();
+        ///await calculateIncomeDSF();
 
         initializationTelegramBotEvents = true;
         initializationCompleted = true;
@@ -3955,7 +3955,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    ///setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
