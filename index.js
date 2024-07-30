@@ -21,6 +21,10 @@ import crvRewardsABI from './utils/crv_rewards_abi.json' assert {type: 'json'};
 import uniswapRouterABI from './utils/uniswap_router_abi.json' assert {type: 'json'};
 import crvABI from './utils/CRV_abi.json' assert {type: 'json'};
 import cvxABI from './utils/CVX_abi.json' assert {type: 'json'};
+import usdtABI from './utils/USDT_abi.json' assert {type: 'json'};
+
+// Импорт ботов 
+import { sendMessageToChat } from './utils/bots/telegramBotEvets.mjs';
 
 const app = express();
 
@@ -33,7 +37,6 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-// NEW
 // Настройка CORS для всех доменов
 const corsOptions = {
     origin: '*', // Разрешить доступ всем источникам
@@ -75,23 +78,41 @@ function logDebug(message) {
 }
 
 // Middleware to redirect HTTP to HTTPS
-app.use((req, res, next) => {
-    if (req.headers['x-forwarded-proto'] !== 'https') {
-        return res.redirect(`https://${req.headers.host}${req.url}`);
-    }
-    next();
-});
+// app.use((req, res, next) => {
+//     if (req.headers['x-forwarded-proto'] !== 'https') {
+//         return res.redirect(`https://${req.headers.host}${req.url}`);
+//     }
+//     next();
+// });
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    connectTimeout: 10000 // Увеличение времени ожидания подключения до 10 секунд
-});
+let pool;
+
+// Функция для создания пула соединений
+async function createPool() {
+    pool = mysql.createPool({
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        connectTimeout: 10000 // Увеличение времени ожидания подключения до 10 секунд
+    });
+}
+
+createPool();
+
+// const pool = mysql.createPool({
+//     host: process.env.DB_HOST,
+//     user: process.env.DB_USER,
+//     password: process.env.DB_PASSWORD,
+//     database: process.env.DB_NAME,
+//     waitForConnections: true,
+//     connectionLimit: 10,
+//     queueLimit: 0,
+//     connectTimeout: 10000 // Увеличение времени ожидания подключения до 10 секунд
+// });
 
 // Проверка доступности сервера базы данных
 async function testConnection() {
@@ -108,8 +129,18 @@ async function testConnection() {
 
 testConnection();
 
-// For RESTART DataBase apy_info: 
+// For RESTART DataBase apy_info:  
 // const dropTableQuery = `DROP TABLE IF EXISTS apy_info;`;
+//         await pool.query(dropTableQuery);
+//         console.log('Таблица успешно удалена');
+
+// For RESTART DataBase incomDSFfromEveryOne:  
+// const dropTableQuery = `DROP TABLE IF EXISTS incomDSFfromEveryOne;`;
+//         await pool.query(dropTableQuery);
+//         console.log('Таблица успешно удалена');
+
+// For RESTART DataBase settings:  
+// const dropTableQuery = `DROP TABLE IF EXISTS settings;`;
 //         await pool.query(dropTableQuery);
 //         console.log('Таблица успешно удалена');
 
@@ -148,6 +179,10 @@ const createWalletTableQuery = `
         crv_share DECIMAL(36, 18) NOT NULL,
         crv_cost DECIMAL(36, 6) NOT NULL,
         annual_yield_rate DECIMAL(36, 6) NOT NULL,
+        eth_spent DECIMAL(36, 18) NOT NULL,
+        usd_spent DECIMAL(36, 2) NOT NULL,
+        eth_saved DECIMAL(36, 18) NOT NULL,
+        usd_saved DECIMAL(36, 2) NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
 `;
@@ -165,6 +200,30 @@ async function initializeDatabaseWallet() {
 }
 
 initializeDatabaseWallet();
+
+// Таблица для хранениния номера последнего проверенного блока
+const createSettingsTableQuery = `
+    CREATE TABLE IF NOT EXISTS settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        setting_key VARCHAR(255) NOT NULL UNIQUE,
+        value VARCHAR(255) NOT NULL
+    );
+`;
+
+async function initializeDatabaseSettings() {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.query(createSettingsTableQuery);
+        logSuccess(`\nTable 'Settings' checked/created successfully.\n`);
+    } catch (error) {
+        logError(`\nFailed to create 'settings' table: ${error}\n`);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+initializeDatabaseSettings();
 
 //NEW
 // Таблица apy_info
@@ -311,6 +370,34 @@ async function initializeAvailableToWithdrawTable() {
 
 initializeAvailableToWithdrawTable();
 
+// v3
+// Таблица incomDSFfromEveryOne для хранения информации о доходе DSF с каждого кошелька
+const createIncomDSFfromEveryOneTableQuery = `
+    CREATE TABLE IF NOT EXISTS incomDSFfromEveryOne (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        wallet_address VARCHAR(255) NOT NULL,
+        incomeDSF DECIMAL(36, 18) NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE(wallet_address)
+    );
+`;
+
+
+async function initializeDatabaseIncomDSF() {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.query(createIncomDSFfromEveryOneTableQuery);
+        console.log(`Table 'incomDSFfromEveryOne' checked/created successfully.`);
+    } catch (error) {
+        console.error(`Failed to create 'incomDSFfromEveryOne' table: ${error}`);
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+initializeDatabaseIncomDSF();
+
 // Таблица weighted_yield_rate для хранения средневзвешенной ставки дохода
 const createWeightedYieldRateTableQuery = `
     CREATE TABLE IF NOT EXISTS weighted_yield_rate (
@@ -383,7 +470,7 @@ async function connectToWeb3Provider() {
         await web3.eth.net.getId();
         console.log(`Connected to Ethereum network using provider: ${selectedProvider}`);
     } catch (error) {
-        logError(`Failed to connect to provider ${providers[providerIndex]}:`, error);
+        logError(`Failed to connect to provider ${providers[providerIndex]}: ${error}`);
         //Go to the next provider
         providerIndex = (providerIndex + 1) % providers.length;
         await connectToWeb3Provider(); // Recursively try to connect to the next ISP
@@ -391,6 +478,31 @@ async function connectToWeb3Provider() {
 }
 
 connectToWeb3Provider();
+
+// v2
+// Функция для проверки провайдеров
+async function checkWeb3Provider(provider) {
+    try {
+        const response = await axios.post(provider, {
+            jsonrpc: "2.0",
+            method: "eth_blockNumber",
+            params: [],
+            id: 1
+        });
+
+        if (response.data && response.data.result) {
+            logSuccess(`VALID   - Web3 Provider ${provider}`);
+            return true;
+        } else {
+            const errorMessage = response.statusText || "Unknown error";
+            logError(`INVALID - Provider ${provider} : ${errorMessage}`);
+            return false;
+        }
+    } catch (error) {
+        logError(`An error occurred while checking the provider ${provider} : ${error.message}`);
+        return false;
+    }
+}
 
 const etherscanApiKeys = process.env.ETHERSCAN_API_KEYS 
     ? process.env.ETHERSCAN_API_KEYS.split(',')
@@ -402,8 +514,83 @@ let etherscanApiKeyIndex = 0;
 function getNextEtherscanApiKey() {
     const apiKey = etherscanApiKeys[etherscanApiKeyIndex];
     etherscanApiKeyIndex = (etherscanApiKeyIndex + 1) % etherscanApiKeys.length;
+    console.log(`Next Etherscan API Key: ${apiKey}`);
     return apiKey;
 }
+
+// v2
+// Функция для проверки API ключей etherscan
+async function checkEtherscanApiKey(apiKey) {
+    try {
+        const response = await axios.get('https://api.etherscan.io/api', {
+            params: {
+                module: 'stats',
+                action: 'ethprice',
+                apikey: apiKey
+            }
+        });
+
+        if (response.data && response.data.status === '1') {
+            logSuccess(`VALID   - Etherscan API key ${apiKey}`);
+            return true;
+        } else {
+            logError(`INVALID - Etherscan API key ${apiKey} : ${response.data.message}`);
+            return false;
+        }
+    } catch (error) {
+        logError(`An error occurred while checking the API key ${apiKey} : ${error}`);
+        return false;
+    }
+}
+
+async function checkAllApiKeys() {
+    
+    logWarning(`\nCheck Etherscan Api Keys\n`);
+    for (const apiKey of etherscanApiKeys) {
+        const isValid = await checkEtherscanApiKey(apiKey);
+        //console.log(`API key ${apiKey} validity: ${isValid}`);
+    }
+
+    logWarning(`\nCheck Web3 Providers Api Keys\n`);
+    for (const provider of providers) {
+        const isValid = await checkWeb3Provider(provider);
+        //console.log(`Provider ${provider} validity: ${isValid}`);
+    }
+}
+
+// Функция для повторного выполнения запроса с экспоненциальной задержкой
+const retry = async (fn, retries = 5, delay = 500) => {
+    try {
+        return await fn();
+    } catch (error) {
+        if (retries > 0) {
+            logWarning(`Retrying... attempts left: ${retries}`);
+            providerIndex = (providerIndex + 1) % providers.length;
+            await connectToWeb3Provider(); // Обновление провайдера перед повторной попыткой
+            await new Promise(res => setTimeout(res, delay));
+            return retry(fn, retries - 1, delay * 2);
+        } else {
+            throw error;
+        }
+    }
+};
+
+// Функция для повторного выполнения запроса с экспоненциальной задержкой
+const retryEtherscan = async (fn, retries = 5, delay = 1500) => {
+    try {
+        return await fn();
+    } catch (error) {
+        if (retries > 0) {
+            logWarning(`Retrying... attempts left: ${retries}`);
+            etherscanApiKeyIndex = (etherscanApiKeyIndex + 1) % etherscanApiKeys.length;
+            //await getNextEtherscanApiKey(); // Обновление провайдера перед повторной попыткой
+            await new Promise(res => setTimeout(res, delay));
+            return retryEtherscan(fn, retries - 1, delay * 2);
+        } else {
+            throw error;
+        }
+    }
+};
 
 const contractDSF = new web3.eth.Contract(dsfABI, contractsLib.DSFmain);
 const contractDSFStrategy = new web3.eth.Contract(dsfStrategyABI, contractsLib.DSFStrategy);
@@ -415,6 +602,10 @@ const config_cvxContract = new web3.eth.Contract(cvxABI, contractsLib.CVX);
 
 const crvToUsdtPath = [contractsLib.CRV,contractsLib.WETH,contractsLib.USDT];
 const cvxToUsdtPath = [contractsLib.CVX,contractsLib.WETH,contractsLib.USDT];
+
+const addressesStrategy = [
+    contractsLib.DSFStrategy
+];
 
 //
 //
@@ -428,27 +619,38 @@ async function getWalletData(walletAddress_) {
     const walletAddress = normalizeAddress(walletAddress_);
     console.log('\nNormalized Address      :', walletAddress);
 
+    // считаем сэкономленое и потраченое кошельком на транзакциях
+    const resultSavingsAndSpending = await calculateSavingsAndSpending(walletAddress_);
+    const ethSpent = resultSavingsAndSpending.totalEthSpent;
+    const usdSpent = resultSavingsAndSpending.totalUsdSpent;
+    const ethSaved = resultSavingsAndSpending.totalEthSaved;
+    const usdSaved = resultSavingsAndSpending.totalUsdSaved;
+
     let ratioUser_ = 0; // Установите значение по умолчанию на случай ошибки
 
     try {
-        ratioUser_ = await ratioContract.methods.calculateLpRatio(walletAddress).call();
+        ratioUser_ = await retry(() => ratioContract.methods.calculateLpRatio(walletAddress).call());
         console.log('ratioUser_:',ratioUser_);
     } catch (error) {
-        logError("Error occurred while fetching ratio:", error);
+        logError(`Error occurred while fetching ratio : ${error}`);
         ratioUser_ = 0; // Установка значения 0 в случае ошибки
         console.log('ratioUser_:',ratioUser_);
     }
 
     if (ratioUser_ === 0) {
-        logWarning("userDeposits       USDT : 0");
-        logWarning("dsfLpBalance     DSF LP : 0");
-        logWarning("ratioUser             % : 0");
-        logWarning("availableWithdraw  USDT : 0");
-        logWarning("cvxShare            CVX : 0");
-        logWarning("cvxCost            USDT : 0");
-        logWarning("crvShare            CRV : 0");
-        logWarning("crvCost            USDT : 0");
-        logWarning("annualYieldRate       % : 0");
+        logWarning(`userDeposits       USDT : 0`);
+        logWarning(`dsfLpBalance     DSF LP : 0`);
+        logWarning(`ratioUser             % : 0`);
+        logWarning(`availableWithdraw  USDT : 0`);
+        logWarning(`cvxShare            CVX : 0`);
+        logWarning(`cvxCost            USDT : 0`);
+        logWarning(`crvShare            CRV : 0`);
+        logWarning(`crvCost            USDT : 0`);
+        logWarning(`annualYieldRate       % : 0`);
+        logWarning(`ethSpent            ETH : ${ethSpent}`);
+        logWarning(`usdSpent              $ : ${usdSpent}`);
+        logWarning(`ethSaved            ETH : ${ethSaved}`);
+        logWarning(`usdSaved              $ : ${usdSaved}`);
         return {
             userDeposits: 0,
             dsfLpBalance: 0,
@@ -458,14 +660,18 @@ async function getWalletData(walletAddress_) {
             cvxCost: 0,
             crvShare: 0,
             crvCost: 0,
-            annualYieldRate: 0
+            annualYieldRate: 0,
+            ethSpent,
+            usdSpent,
+            ethSaved,
+            usdSaved
         };
     }
 
     let availableToWithdraw_;
 
     try {
-        availableToWithdraw_ = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call();
+        availableToWithdraw_ = await retry(() => contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call());
         console.log('availableToWithdraw_   :',availableToWithdraw_);
     } catch (error) {
         logError("Error occurred while fetching available to withdraw:", error);
@@ -476,7 +682,7 @@ async function getWalletData(walletAddress_) {
     let dsfLpBalance_;
 
     try {
-        dsfLpBalance_ = await contractDSF.methods.balanceOf(walletAddress).call();
+        dsfLpBalance_ = await retry(() => contractDSF.methods.balanceOf(walletAddress).call());
         console.log('dsfLpBalance_          :',dsfLpBalance_);
     } catch (error) {
         logError("Error occurred while fetching DSF LP balance:", error);
@@ -488,23 +694,23 @@ async function getWalletData(walletAddress_) {
         const availableToWithdraw = Number(availableToWithdraw_) / 1e6
         const dsfLpBalance = (Number(dsfLpBalance_) / 1e18).toPrecision(18);
 
-        const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
-        console.log('response:',response.data);
+        // const response = await axios.get(`https://api.dsf.finance/deposit/${walletAddress}`);
+        // console.log('response:',response.data);
 
         const userDeposits = await calculateCurrentDeposit(walletAddress);
         console.log('userDeposits:',userDeposits);
         
-        const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
+        const crvEarned = await retry(() => cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call());
         console.log('crvEarned:',crvEarned);
-        const cvxTotalCliffs = await config_cvxContract.methods.totalCliffs().call();
+        const cvxTotalCliffs = await retry(() => config_cvxContract.methods.totalCliffs().call());
         console.log('cvxTotalCliffs:',cvxTotalCliffs);
-        const cvx_totalSupply = await config_cvxContract.methods.totalSupply().call();
+        const cvx_totalSupply = await retry(() => config_cvxContract.methods.totalSupply().call());
         console.log('cvx_totalSupply:',cvx_totalSupply);
-        const cvx_reductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
+        const cvx_reductionPerCliff = await retry(() => config_cvxContract.methods.reductionPerCliff().call());
         console.log('cvx_reductionPerCliff:',cvx_reductionPerCliff);
-        const cvx_balanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const cvx_balanceOf = await retry(() => config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call());
         console.log('cvx_balanceOf:',cvx_balanceOf);
-        const crv_balanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const crv_balanceOf = await retry(() => config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call());
         console.log('crv_balanceOf:',crv_balanceOf);
         const cvxRemainCliffs = cvxTotalCliffs - cvx_totalSupply / cvx_reductionPerCliff;
         console.log('cvxRemainCliffs:',cvxRemainCliffs);
@@ -523,8 +729,8 @@ async function getWalletData(walletAddress_) {
         console.log('crvShare_:',crvShare_);
 
         if (crvShare_ > 20000 && cvxShare_ > 20000) {
-            const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
-            const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
+            const crvCost_Array = await retry(() => routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call());
+            const cvxCost_Array = await retry(() => routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call());
             console.log('crvCost_Array:',crvCost_Array);
             crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
             console.log('crvCost:',crvCost);
@@ -553,6 +759,10 @@ async function getWalletData(walletAddress_) {
         console.log("crvShare            CRV : " + crvShare);
         console.log("crvCost            USDT : " + crvCost);
         console.log("annualYieldRate       % : " + annualYieldRate);
+        console.log(`ethSpent            ETH : ${ethSpent}`);
+        console.log(`usdSpent              $ : ${usdSpent}`);
+        console.log(`ethSaved            ETH : ${ethSaved}`);
+        console.log(`usdSaved              $ : ${usdSaved}`);
 
         return {
             userDeposits,
@@ -563,7 +773,11 @@ async function getWalletData(walletAddress_) {
             cvxCost,
             crvShare,
             crvCost,
-            annualYieldRate
+            annualYieldRate,
+            ethSpent,
+            usdSpent,
+            ethSaved,
+            usdSaved
         };
     } catch (error) {
         logError(`Error retrieving data for wallet: ${walletAddress} ${error}`);
@@ -576,6 +790,10 @@ async function getWalletData(walletAddress_) {
         logWarning("crvShare            CRV : 0");
         logWarning("crvCost            USDT : 0");
         logWarning("annualYieldRate       % : 0");
+        logWarning(`ethSpent            ETH : 0`);
+        logWarning(`usdSpent              $ : 0`);
+        logWarning(`ethSaved            ETH : 0`);
+        logWarning(`usdSaved              $ : 0`);
         return {
             userDeposits: 0,
             dsfLpBalance: 0,
@@ -585,7 +803,11 @@ async function getWalletData(walletAddress_) {
             cvxCost: 0,
             crvShare: 0,
             crvCost: 0,
-            annualYieldRate: 0
+            annualYieldRate: 0,
+            ethSpent: 0,
+            usdSpent: 0,
+            ethSaved: 0,
+            usdSaved: 0
         };
     }
 }
@@ -597,10 +819,17 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
     const walletAddress = normalizeAddress(walletAddress_);
     console.log('\nNormalized Address      :', walletAddress);
 
+    // считаем сэкономленое и потраченое кошельком на транзакциях
+    const resultSavingsAndSpending = await calculateSavingsAndSpending(walletAddress_);
+    const ethSpent = resultSavingsAndSpending.totalEthSpent;
+    const usdSpent = resultSavingsAndSpending.totalUsdSpent;
+    const ethSaved = resultSavingsAndSpending.totalEthSaved;
+    const usdSaved = resultSavingsAndSpending.totalUsdSaved;
+
     let ratioUser_ = 0;
 
     try {
-        ratioUser_ = await ratioContract.methods.calculateLpRatio(walletAddress).call();
+        ratioUser_ = await retry(() => ratioContract.methods.calculateLpRatio(walletAddress).call());
         console.log('ratioUser_:', ratioUser_);
     } catch (error) {
         logError("Error occurred while fetching ratio"); //, error);
@@ -609,15 +838,19 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
     }
 
     if (ratioUser_ === 0) {
-        logWarning("userDeposits       USDT : 0");
-        logWarning("dsfLpBalance     DSF LP : 0");
-        logWarning("ratioUser             % : 0");
-        logWarning("availableWithdraw  USDT : 0");
-        logWarning("cvxShare            CVX : 0");
-        logWarning("cvxCost            USDT : 0");
-        logWarning("crvShare            CRV : 0");
-        logWarning("crvCost            USDT : 0");
-        logWarning("annualYieldRate       % : 0");
+        logWarning(`userDeposits       USDT : 0`);
+        logWarning(`dsfLpBalance     DSF LP : 0`);
+        logWarning(`ratioUser             % : 0`);
+        logWarning(`availableWithdraw  USDT : 0`);
+        logWarning(`cvxShare            CVX : 0`);
+        logWarning(`cvxCost            USDT : 0`);
+        logWarning(`crvShare            CRV : 0`);
+        logWarning(`crvCost            USDT : 0`);
+        logWarning(`annualYieldRate       % : 0`);
+        logWarning(`ethSpent            ETH : ${ethSpent}`);
+        logWarning(`usdSpent              $ : ${usdSpent}`);
+        logWarning(`ethSaved            ETH : ${ethSaved}`);
+        logWarning(`usdSaved              $ : ${usdSaved}`);
         return {
             userDeposits: 0,
             dsfLpBalance: 0,
@@ -627,14 +860,18 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
             cvxCost: 0,
             crvShare: 0,
             crvCost: 0,
-            annualYieldRate: 0
+            annualYieldRate: 0,
+            ethSpent,
+            usdSpent,
+            ethSaved,
+            usdSaved
         };
     }
 
     let availableToWithdraw_;
 
     try {
-        availableToWithdraw_ = await contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call();
+        availableToWithdraw_ = await retry(() => contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call());
         //console.log('availableToWithdraw_:', availableToWithdraw_);
     } catch (error) {
         logError("Error occurred while fetching available to withdraw"); //, error);
@@ -645,7 +882,7 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
     let dsfLpBalance_;
 
     try {
-        dsfLpBalance_ = await contractDSF.methods.balanceOf(walletAddress).call();
+        dsfLpBalance_ = await retry(() => contractDSF.methods.balanceOf(walletAddress).call());
         //console.log('dsfLpBalance_:', dsfLpBalance_);
     } catch (error) {
         logError("Error occurred while fetching DSF LP balance"); //, error);
@@ -669,8 +906,8 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
         //console.log('crvShare_:', crvShare_);
 
         if (crvShare_ > 20000 && cvxShare_ > 20000) {
-            const crvCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call();
-            const cvxCost_Array = await routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call();
+            const crvCost_Array = await retry(() => routerContract.methods.getAmountsOut(Math.trunc(crvShare_), crvToUsdtPath).call());
+            const cvxCost_Array = await retry(() => routerContract.methods.getAmountsOut(Math.trunc(cvxShare_), cvxToUsdtPath).call());
             //console.log('crvCost_Array:', crvCost_Array);
             crvCost = Number(crvCost_Array[crvCost_Array.length - 1]) / 1e6;
             //console.log('crvCost:', crvCost);
@@ -698,6 +935,10 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
         console.log("crvShare            CRV : " + crvShare);
         console.log("crvCost            USDT : " + crvCost);
         console.log("annualYieldRate       % : " + annualYieldRate);
+        console.log(`ethSpent            ETH : ${ethSpent}`);
+        console.log(`usdSpent              $ : ${usdSpent}`);
+        console.log(`ethSaved            ETH : ${ethSaved}`);
+        console.log(`usdSaved              $ : ${usdSaved}`);
 
         return {
             userDeposits,
@@ -708,7 +949,11 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
             cvxCost,
             crvShare,
             crvCost,
-            annualYieldRate
+            annualYieldRate,
+            ethSpent,
+            usdSpent,
+            ethSaved,
+            usdSaved
         };
     } catch (error) {
         logError(`Error retrieving data for wallet: ${walletAddress} ${error}`);
@@ -721,6 +966,10 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
         logWarning("crvShare            CRV : 0");
         logWarning("crvCost            USDT : 0");
         logWarning("annualYieldRate       % : 0");
+        logWarning(`ethSpent            ETH : 0`);
+        logWarning(`usdSpent              $ : 0`);
+        logWarning(`ethSaved            ETH : 0`);
+        logWarning(`usdSaved              $ : 0`);
         return {
             userDeposits: 0,
             dsfLpBalance: 0,
@@ -730,7 +979,11 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
             cvxCost: 0,
             crvShare: 0,
             crvCost: 0,
-            annualYieldRate: 0
+            annualYieldRate: 0,
+            ethSpent: 0,
+            usdSpent: 0,
+            ethSaved: 0,
+            usdSaved: 0
         };
     }
 }
@@ -796,7 +1049,7 @@ async function calculateCurrentDeposit(walletAddress) {
                 }
             }
 
-            logInfo(`Processing event: ${event.event} - ${event.transactionHash}`);
+            //logInfo(`Processing event: ${event.event} - ${event.transactionHash}`);
 
             if (event.event === 'Deposited') {
                 
@@ -811,11 +1064,11 @@ async function calculateCurrentDeposit(walletAddress) {
 
                 if (withdrawRecords.length > 0) {
                     totalDepositedUSD += parseFloat(withdrawRecords[0].availableToWithdraw);
-                    logInfo(`Deposited - Using availableToWithdraw value: ${withdrawRecords[0].availableToWithdraw}`);
+                    //logInfo(`Deposited - Using availableToWithdraw value: ${withdrawRecords[0].availableToWithdraw}`);
                 } else {
                     const depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
                     totalDepositedUSD += depositedUSD - (depositedUSD * 0.0016); // Вычитаем 0.16% комиссии
-                    logInfo(`Deposited - Calculated value: ${depositedUSD - (depositedUSD * 0.0016)}`);
+                    //logInfo(`Deposited - Calculated value: ${depositedUSD - (depositedUSD * 0.0016)}`);
                 }
                 totalLpShares += parseFloat(returnValues.lpShares);
                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}`);
@@ -842,11 +1095,11 @@ async function calculateCurrentDeposit(walletAddress) {
                     if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
                     if (totalLpShares < 0) totalLpShares = 0; // Защита от отрицательных значений
 
-                    logInfo(`Transfer - Sent: ${usdValue} USD, ${lpValue} LP`);
+                    //logInfo(`Transfer - Sent: ${usdValue} USD, ${lpValue} LP`);
                 } else if (returnValues.to === walletAddress) {
                     totalDepositedUSD += usdValue;
                     totalLpShares += lpValue;
-                    logInfo(`Transfer - Received: ${usdValue} USD, ${lpValue} LP`);
+                    //logInfo(`Transfer - Received: ${usdValue} USD, ${lpValue} LP`);
                 }
                 logInfo(`Updated totalDepositedUSD: ${totalDepositedUSD}, totalLpShares: ${totalLpShares}`);
             } else if (event.event === 'Withdrawn') {
@@ -862,11 +1115,11 @@ async function calculateCurrentDeposit(walletAddress) {
                 if (withdrawRecords.length > 0) {
                     const withdrawnUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
                     totalDepositedUSD -= withdrawnUSD;
-                    logInfo(`Withdrawn - Using availableToWithdraw value: ${withdrawnUSD}`);
+                    //logInfo(`Withdrawn - Using availableToWithdraw value: ${withdrawnUSD}`);
                 } else {
                     const withdrawnUSD = totalDepositedUSD * sharePercentage;
                     totalDepositedUSD -= withdrawnUSD;
-                    logInfo(`Withdrawn - Calculated value: ${withdrawnUSD}`);
+                    //logInfo(`Withdrawn - Calculated value: ${withdrawnUSD}`);
                 }
 
                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
@@ -888,175 +1141,6 @@ async function calculateCurrentDeposit(walletAddress) {
 }
 
 // Функция для расчета средневзвешенной ставки дохода
-// async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
-
-//     logWarning(`calculateWeightedYieldRate`);
-
-//     let connection;
-//     try {
-//         connection = await pool.getConnection();
-
-//         // Получаем все события для данного депозитора
-//         const [events] = await connection.query(
-//             `SELECT * FROM contract_events 
-//              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
-//                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
-//              ORDER BY eventDate ASC`,
-//             [walletAddress, walletAddress]
-//         );
-
-//         if (events.length === 0) {
-//             logInfo(`События не найдены для депозитора: ${walletAddress}`);
-//             return 0;
-//         }
-
-//         let totalDepositedUSD = 0;
-//         let weightedDepositDays = 0;
-//         let lastEventDate = null;
-
-//         for (const event of events) {
-//             let returnValues = event.returnValues;
-
-//             // Проверка, если returnValues - строка, тогда парсинг
-//             if (typeof returnValues === 'string') {
-//                 try {
-//                     returnValues = JSON.parse(returnValues);
-//                 } catch (error) {
-//                     console.error(`Не удалось разобрать returnValues для события: ${event.transactionHash}`, error);
-//                     continue;
-//                 }
-//             }
-
-//             const eventDate = new Date(event.eventDate);
-//             const eventDateOnly = eventDate.toISOString().split('T')[0];
-
-//             logInfo(`Обработка события: ${event.event} - ${event.transactionHash} на ${eventDateOnly}`);
-
-//             let depositedUSD = 0;
-//             if (event.event === 'Deposited' || (event.event === 'Transfer' && returnValues.to === walletAddress)) {
-                
-//                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
-                
-//                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
-//                 const [withdrawRecords] = await connection.query(
-//                     `SELECT availableToWithdraw FROM availableToWithdraw 
-//                      WHERE transactionHash = ? AND event = ?`,
-//                     [event.transactionHash, event.event]
-//                 );
-
-//                 if (withdrawRecords.length > 0) {
-//                     depositedUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
-//                     logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
-//                 } else {
-//                     if (event.event === 'Deposited') {
-//                         depositedUSD = parseFloat(returnValues.amounts.DAI) + parseFloat(returnValues.amounts.USDC) + parseFloat(returnValues.amounts.USDT);
-//                         depositedUSD -= depositedUSD * 0.0016; // Вычитаем 0.16% из суммы депозита
-//                         logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD} после вычета 0.16%`);
-//                     } else {
-//                         depositedUSD = parseFloat(returnValues.usdValue);
-//                         logInfo(`${event.event} - Рассчитанная сумма: ${depositedUSD}`);
-//                     }
-//                 }
-
-//                 // Если это не первое событие, добавляем взвешенное количество дней депозита
-//                 if (lastEventDate) {
-//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
-//                     weightedDepositDays += totalDepositedUSD * daysActive;
-//                     logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
-//                 }
-
-//                 totalDepositedUSD += depositedUSD; // Обновляем общую сумму депозита
-//                 lastEventDate = eventDate; // Обновляем дату последнего события
-//                 logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита: ${weightedDepositDays}`);
-//             } else if (event.event === 'Withdrawn' || (event.event === 'Transfer' && returnValues.from === walletAddress)) {
-//                 // Если это событие вывода или трансфера средств от пользователя
-//                 let withdrawnUSD = 0;
-            
-//                 // Проверяем наличие записи в availableToWithdraw для более точной суммы USD
-//                 const [withdrawRecords] = await connection.query(
-//                     `SELECT availableToWithdraw FROM availableToWithdraw 
-//                      WHERE transactionHash = ? AND event = ?`,
-//                     [event.transactionHash, event.event]
-//                 );
-            
-//                 if (withdrawRecords.length > 0) {
-//                     withdrawnUSD = parseFloat(withdrawRecords[0].availableToWithdraw);
-//                     logInfo(`${event.event} - Использование значения availableToWithdraw: ${withdrawRecords[0].availableToWithdraw}`);
-//                 } else {
-//                     withdrawnUSD = parseFloat(returnValues.usdValue);
-//                     logInfo(`${event.event} - Рассчитанная сумма: ${withdrawnUSD}`);
-//                 }
-            
-//                 // Если это не первое событие, добавляем взвешенное количество дней депозита для суммы на счету до события вывода
-//                 if (lastEventDate) {
-//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
-//                     weightedDepositDays += totalDepositedUSD * daysActive;
-//                     logInfo(`Withdrawn - Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
-//                 }
-            
-//                 // Вычитаем взвешенные дни депозита для выведенных средств
-//                 if (lastEventDate) {
-//                     const daysActive = (eventDate - lastEventDate) / (1000 * 60 * 60 * 24);
-//                     weightedDepositDays -= withdrawnUSD * daysActive;
-//                     logInfo(`Withdrawn - Вычтено ${daysActive} активных дней для withdrawnUSD: ${withdrawnUSD}, взвешенные дни депозита теперь: ${weightedDepositDays}`);
-//                 }
-            
-//                 totalDepositedUSD -= withdrawnUSD; // Обновляем общую сумму депозита
-//                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
-            
-//                 // Обнуление взвешенных дней, если депозит стал равен нулю
-//                 if (totalDepositedUSD === 0) {
-//                     weightedDepositDays = 0;
-//                     logInfo(`Депозит стал равен нулю, обнуляем взвешенные дни депозита.`);
-//                 }
-
-//                 lastEventDate = eventDate; // Обновляем дату последнего события
-//                 logInfo(`Обновлено totalDepositedUSD: ${totalDepositedUSD}, взвешенные дни депозита: ${weightedDepositDays}`);
-//             }            
-//         } 
-
-//         // Добавляем текущие взвешенные дни депозита до текущей даты
-//         if (lastEventDate) {
-//             const daysActive = (new Date() - lastEventDate) / (1000 * 60 * 60 * 24);
-//             weightedDepositDays += totalDepositedUSD * daysActive;
-//             logInfo(`Добавлено ${daysActive} активных дней для totalDepositedUSD: ${totalDepositedUSD} до сегодняшнего дня, взвешенные дни депозита теперь: ${weightedDepositDays}`);
-//         }
-
-//         const totalValue = availableToWithdraw + cvxCost + crvCost - userDeposits;
-//         logInfo(`Общая сумма из availableToWithdraw, cvxCost и crvCost - userDeposits: ${totalValue}`);
-
-//         if (weightedDepositDays === 0) {
-//             logWarning(`Взвешенные дни депозита равны нулю, возвращаем 0 для ${walletAddress}`);
-//             return 0;
-//         }
-
-//         const averageDailyRate = totalValue / weightedDepositDays;
-//         const annualYieldRate = averageDailyRate * 365 * 100;
-
-//         logInfo(`Средняя дневная ставка: ${averageDailyRate}`);
-//         logInfo(`Рассчитанная годовая доходность: ${annualYieldRate}`);
-
-//         // Вставляем или обновляем запись для текущего депозитора и даты
-//         const insertQuery = `
-//             INSERT INTO personal_yield_rate (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
-//             VALUES (?, ?, ?, ?, ?)
-//             ON DUPLICATE KEY UPDATE
-//             daily_income = VALUES(daily_income),
-//             daily_yield_rate = VALUES(daily_yield_rate),
-//             annual_apy = VALUES(annual_apy)
-//         `;
-//         await connection.query(insertQuery, [walletAddress, new Date(), totalValue, averageDailyRate, annualYieldRate]);
-//         logInfo(`Вставлено/обновлено взвешенная ставка доходности для ${walletAddress} на ${new Date().toISOString().split('T')[0]}`);
-
-//         return annualYieldRate;
-//     } catch (error) {
-//         logError("Не удалось рассчитать взвешенную ставку доходности:", error);
-//         return 0;
-//     } finally {
-//         if (connection) connection.release();
-//     }
-// }
-
 async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cvxCost, crvCost, userDeposits) {
     let connection;
     try {
@@ -1265,175 +1349,82 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
     }
 }
 
+// Функция для вычисления потраченных и сэкономленных средств кошелька
+async function calculateSavingsAndSpending(wallet) {
+    
+    const spendingQuery = `
+    SELECT SUM(transactionCostEth) AS totalEthSpent, SUM(transactionCostUsd) AS totalUsdSpent
+    FROM contract_events
+    WHERE 
+        (
+            event IN ('CreatedPendingDeposit', 'CreatedPendingWithdrawal')
+            OR 
+            (event IN ('Withdrawn', 'Deposited', 'FailedWithdraw', 'FailedDeposit') AND JSON_EXTRACT(returnValues, '$.transaction_status') = 'Standard')
+        )
+        AND 
+        (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
+`;
 
+    const savingsQuery = `
+        SELECT SUM(transactionCostEth) AS totalEthOptimized, SUM(transactionCostUsd) AS totalUsdOptimized
+        FROM contract_events
+        WHERE (event = 'Withdrawn' OR event = 'Deposited')
+        AND JSON_EXTRACT(returnValues, '$.transaction_status') = 'Optimized'
+        AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
+    `;
 
-// Endpoint для получения текущего депозита для конкретного кошелька
-app.get('/current-deposit/:walletAddress', async (req, res) => {
-    const walletAddress = req.params.walletAddress;
+    const pendingCostsQuery = `
+        SELECT SUM(transactionCostEth) AS totalEthPending, SUM(transactionCostUsd) AS totalUsdPending
+        FROM contract_events
+        WHERE (event = 'CreatedPendingDeposit' OR event = 'CreatedPendingWithdrawal')
+        AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
+    `;
 
     try {
-        const currentDeposit = await calculateCurrentDeposit(walletAddress);
-        res.json({ walletAddress, currentDeposit });
+        // Расчет потраченных средств
+        console.log(`Executing spending query for wallet: ${wallet}`);
+        const [spendingRows] = await pool.query(spendingQuery, [wallet, wallet]);
+        console.log(`Spending query result: ${JSON.stringify(spendingRows)}`);
+        const totalEthSpent = spendingRows[0].totalEthSpent || 0.0;
+        const totalUsdSpent = spendingRows[0].totalUsdSpent || 0.0;
+        console.log(`Total ETH spent: ${totalEthSpent}, Total USD spent: ${totalUsdSpent}`);
+
+        // Расчет сэкономленных средств
+        console.log(`Executing savings query for wallet: ${wallet}`);
+        const [savingsRows] = await pool.query(savingsQuery, [wallet, wallet]);
+        console.log(`Savings query result: ${JSON.stringify(savingsRows)}`);
+        const totalEthOptimized = savingsRows[0].totalEthOptimized || 0.0;
+        const totalUsdOptimized = savingsRows[0].totalUsdOptimized || 0.0;
+        console.log(`Total ETH optimized: ${totalEthOptimized}, Total USD optimized: ${totalUsdOptimized}`);
+
+        // Расчет потраченных средств
+        console.log(`Executing pending costs query for wallet: ${wallet}`);
+        const [pendingCostsRows] = await pool.query(pendingCostsQuery, [wallet, wallet]);
+        console.log(`Pending costs query result: ${JSON.stringify(pendingCostsRows)}`);
+        const totalEthPending = pendingCostsRows[0].totalEthPending || 0.0;
+        const totalUsdPending = pendingCostsRows[0].totalUsdPending || 0.0;
+        console.log(`Total ETH pending: ${totalEthPending}, Total USD pending: ${totalUsdPending}`);
+
+        // Вычисление сэкономленных средств
+        const totalEthSaved = totalEthOptimized - totalEthPending;
+        const totalUsdSaved = totalUsdOptimized - totalUsdPending;
+        console.log(`Total ETH saved: ${totalEthSaved}, Total USD saved: ${totalUsdSaved}`);
+
+        const resultSavingsAndSpending = {
+            totalEthSpent: totalEthSpent || 0.0,
+            totalUsdSpent: totalUsdSpent || 0.0,
+            totalEthSaved: totalEthSaved || 0.0,
+            totalUsdSaved: totalUsdSaved || 0.0
+        };
+
+        console.log(`Result for wallet ${wallet}:`, resultSavingsAndSpending);
+        return resultSavingsAndSpending;
+
     } catch (error) {
-        logError(`Failed to calculate current deposit for ${walletAddress}: ${error}`);
-        res.status(500).send('Internal Server Error');
+        console.error(`Failed to calculate savings and spending for wallet ${wallet}: ${error.message}`);
+        throw error;
     }
-});
-
-
-//Обновлена 1.1
-app.get('/wallet/:walletAddress', async (req, res) => {
-
-    connectToWeb3Provider();
-
-    const walletAddress_ = req.params.walletAddress.toLowerCase();
-    
-    const walletAddress = normalizeAddress(walletAddress_);
-
-    // Если адрес некорректный, возвращаем значения по умолчанию
-    if (!walletAddress) {
-        logError('Invalid wallet address:', walletAddress_);
-        return res.json({
-            userDeposits: 0,
-            dsfLpBalance: 0,
-            safeRatioUser: 0,
-            availableToWithdraw: 0,
-            cvxShare: 0,
-            cvxCost: 0,
-            crvShare: 0,
-            crvCost: 0,
-            annualYieldRate: 0
-        });
-    }
-    
-    console.log('\nNormalized Address      :', walletAddress);
-
-    
-    if (!/^(0x)?[0-9a-f]{40}$/i.test(walletAddress)) {
-        logError("Адрес не соответствует ожидаемому формату.");
-    } else {
-        logSuccess("Адрес соответствует ожидаемому формату.");
-    }
-    
-    let connection;
-
-    connection = await pool.getConnection();
-
-    try {
-        // Проверяем наличие кошелька в базе данных unique_depositors
-        const [rows] = await connection.query('SELECT * FROM unique_depositors WHERE depositor_address = ?', [walletAddress]);
-        console.log("Rows from database:", rows);
-        
-        if (rows.length === 0) {
-            // Если кошелек не найден в unique_depositors, возвращаем пустые данные
-            logWarning('Wallet not found in unique_depositors.');
-            return res.json({
-                userDeposits: 0,
-                dsfLpBalance: 0,
-                safeRatioUser: 0,
-                availableToWithdraw: 0,
-                cvxShare: 0,
-                cvxCost: 0,
-                crvShare: 0,
-                crvCost: 0,
-                annualYieldRate: 0
-            });
-        }
-
-        // Проверяем наличие кошелька в базе данных wallet_info
-        const [walletRows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
-        console.log("Rows from database wallet_info:", walletRows);
-
-        if (walletRows.length === 0) {
-            // Если кошелек не найден в wallet_info, получаем данные и сохраняем их
-            console.log("Получаем данные кошелька");
-            try {
-                const walletData = await getWalletData(walletAddress);
-                
-                // Проверяем значения dsfLpBalance и safeRatioUser
-                if (walletData.dsfLpBalance > 0 || walletData.safeRatioUser > 0) {
-
-                    const insertQuery = `
-                        INSERT INTO wallet_info (
-                            wallet_address,
-                            user_deposits,
-                            dsf_lp_balance,
-                            ratio_user,
-                            available_to_withdraw,
-                            cvx_share,
-                            cvx_cost,
-                            crv_share,
-                            crv_cost,
-                            annual_yield_rate,
-                            updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                    `;
-                    await connection.query(insertQuery, [
-                        walletAddress,
-                        walletData.userDeposits,
-                        walletData.dsfLpBalance,
-                        walletData.safeRatioUser,
-                        walletData.availableToWithdraw,
-                        walletData.cvxShare,
-                        walletData.cvxCost,
-                        walletData.crvShare,
-                        walletData.crvCost,
-                        walletData.annualYieldRate
-                    ]);
-                    // Отправляем полученные данные клиенту
-                    const serializedData = serializeBigints(walletData); // Сериализация данных
-                    res.json(serializedData); // Отправка сериализованных данных
-                } else {
-                    logWarning('Wallet balance or ratio is zero, not saving to DB.');
-                    res.json(walletData); // Возвращаем данные без сохранения
-                }
-            } catch (error) {
-                // Логируем ошибку и отправляем ответ сервера
-                logError('Failed to retrieve or insert wallet data:', error);
-                res.status(500).send('Internal Server Error');
-            }
-        } else {
-            // Если данные уже есть, возвращаем их
-            console.log("Данные кошелька уже есть");
-            res.json(walletRows[0]);
-        }
-    } catch (error) {
-        // Обработка ошибок при соединении или выполнении SQL-запроса
-        logError('Database connection or operation failed:', error);
-        res.status(500).send('Internal Server Error');
-    } finally {
-        // Освобождение соединения
-        if (connection) {
-            connection.release();
-        }
-    }
-});
-
-// Вызов функции обновления всех кошельков раз в 3 часа
-cron.schedule('0 */3 * * *', async () => {
-    console.log('Running a task every 3 hours');
-    updateAllWallets(); // Вызов функции обновления всех кошельков
-});
-
-// NEW Разблокировать после теста
-// Создаем cron-задачу для периодического обновления данных APY каждый час
-cron.schedule('0 */1 * * *', async () => {
-    logInfo('Fetching APY data... Every 1 hours');
-    await addNewDayApyData();
-}); 
-
-// Создаем cron-задачу для периодического обновления данных APY 
-// cron.schedule('* * * * *', async () => {
-//     logInfo('Fetching APY data... Every minute');
-//     await addNewDayApyData(); 
-// });
-
-// NEW
-// Создаем cron-задачу для периодического обновления данных APY каждую неделю в понедельник в 00:00
-cron.schedule('0 0 * * 1', async () => {
-    logInfo('Fetching APY data... Every 1 week');
-    await updateApyData();
-});
+}
 
 // Для getWalletDataOptim
 async function updateWalletData(walletAddress, cachedData) {
@@ -1472,8 +1463,13 @@ async function updateWalletData(walletAddress, cachedData) {
                     crv_share,
                     crv_cost,
                     annual_yield_rate,
+                    eth_spent,
+                    usd_spent,
+                    eth_saved,
+                    usd_saved,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+
             `;
 
             const insertValues = [
@@ -1486,7 +1482,11 @@ async function updateWalletData(walletAddress, cachedData) {
                 walletData.cvxCost,
                 walletData.crvShare,
                 walletData.crvCost,
-                walletData.annualYieldRate
+                walletData.annualYieldRate,
+                walletData.ethSpent,
+                walletData.usdSpent,
+                walletData.ethSaved,
+                walletData.usdSaved
             ];
 
             //console.log('Insert query:', insertQuery);
@@ -1507,6 +1507,10 @@ async function updateWalletData(walletAddress, cachedData) {
                 crv_share = ?,
                 crv_cost = ?,
                 annual_yield_rate = ?,
+                eth_spent = ?,
+                usd_spent = ?,
+                eth_saved = ?,
+                usd_saved = ?,
                 updated_at = NOW()
                 WHERE wallet_address = ?
             `;
@@ -1522,6 +1526,10 @@ async function updateWalletData(walletAddress, cachedData) {
                 walletData.crvShare,
                 walletData.crvCost,
                 walletData.annualYieldRate,
+                walletData.ethSpent,
+                walletData.usdSpent,
+                walletData.ethSaved,
+                walletData.usdSaved,
                 walletAddress
             ];
 
@@ -1542,7 +1550,7 @@ async function updateWalletData(walletAddress, cachedData) {
 }
 
 // Для getWalletData 
-async function updateWalletDataSigl(walletAddress) {
+async function updateWalletDataSingl(walletAddress) {
     let connection;
     try {
         // Получение данных кошелька
@@ -1563,6 +1571,10 @@ async function updateWalletDataSigl(walletAddress) {
             crv_share = ?,
             crv_cost = ?,
             annual_yield_rate = ?,
+            eth_spent = ?,
+            usd_spent = ?,
+            eth_saved = ?,
+            usd_saved = ?,
             updated_at = NOW()
             WHERE wallet_address = ?
         `;
@@ -1578,6 +1590,10 @@ async function updateWalletDataSigl(walletAddress) {
             walletData.crvShare,
             walletData.crvCost,
             walletData.annualYieldRate,
+            walletData.ethSpent,
+            walletData.usdSpent,
+            walletData.ethSaved,
+            walletData.usdSaved,
             walletAddress
         ];
 
@@ -1593,22 +1609,6 @@ async function updateWalletDataSigl(walletAddress) {
     }
 }
 
-
-app.post('/update/:walletAddress', async (req, res) => {
-    const walletAddress_ = req.params.walletAddress.toLowerCase();
-    if (!walletAddress_) {
-        throw new Error("\nwalletAddress is not defined");
-    }
-    const walletAddress = normalizeAddress(walletAddress_);
-    try {
-        await updateWalletDataSigl(walletAddress);
-        res.send({ message: 'Data updated successfully' });
-    } catch (error) {
-        logError('Failed to update data:', error);
-        res.status(500).send('Failed to update wallet data');
-    }
-});
-
 async function updateAllWallets() {
     let connection;
     console.log("\nStarting update of all wallets...\n");
@@ -1620,12 +1620,12 @@ async function updateAllWallets() {
         console.log('\n',wallets);
 
         // Получаем общие данные один раз
-        const crvEarned = await cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call();
-        const cvxTotalCliffs = await config_cvxContract.methods.totalCliffs().call();
-        const cvx_totalSupply = await config_cvxContract.methods.totalSupply().call();
-        const cvx_reductionPerCliff = await config_cvxContract.methods.reductionPerCliff().call();
-        const cvx_balanceOf = await config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call();
-        const crv_balanceOf = await config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call();
+        const crvEarned = await retry(() => cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call());
+        const cvxTotalCliffs = await retry(() => config_cvxContract.methods.totalCliffs().call());
+        const cvx_totalSupply = await retry(() => config_cvxContract.methods.totalSupply().call());
+        const cvx_reductionPerCliff = await retry(() => config_cvxContract.methods.reductionPerCliff().call());
+        const cvx_balanceOf = await retry(() => config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call());
+        const crv_balanceOf = await retry(() => config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call());
         const cvxRemainCliffs = cvxTotalCliffs - cvx_totalSupply / cvx_reductionPerCliff;
         const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvx_balanceOf;
         const amountInCRV = crvEarned + crv_balanceOf;
@@ -1654,7 +1654,19 @@ async function updateAllWallets() {
         console.log(`${colors.yellow}${`  amountInCVX           : `}${colors.reset}${cachedData.amountInCVX}`);
 
         for (const wallet of wallets) {
-            await updateWalletData(wallet.wallet_address, cachedData);
+            try {
+                await updateWalletData(wallet.wallet_address, cachedData);
+                await new Promise(resolve => setTimeout(resolve, 100)); // Задержка 100 мс между запросами
+            } catch (error) {
+                logError(`Error updating wallet ${wallet.wallet_address}: ${error.message}`);
+                // Повторная попытка после задержки
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                try {
+                    await updateWalletData(wallet.wallet_address, cachedData);
+                } catch (retryError) {
+                    logError(`Retry failed for wallet ${wallet.wallet_address}: ${retryError.message}`);
+                }
+            }
         }
         logSuccess(`\nAll wallet data updated successfully.`);
     } catch (error) {
@@ -1664,6 +1676,23 @@ async function updateAllWallets() {
     }
 }
 
+// Проверить ???
+app.post('/update/:walletAddress', async (req, res) => {
+    const walletAddress_ = req.params.walletAddress.toLowerCase();
+    if (!walletAddress_) {
+        throw new Error("\nwalletAddress is not defined");
+    }
+    const walletAddress = normalizeAddress(walletAddress_);
+    try {
+        await updateWalletDataSingl(walletAddress);
+        res.send({ message: 'Data updated successfully' });
+    } catch (error) {
+        logError('Failed to update data:', error);
+        res.status(500).send('Failed to update wallet data');
+    }
+});
+
+// Эндпоинт для получения данных всех кошельков
 app.get('/wallets', async (req, res) => {
     let connection;
 
@@ -1687,6 +1716,206 @@ app.get('/wallets', async (req, res) => {
         }
     }
 });
+
+// Эндпоинт для получения потраченных и сэкономленных средств для конкретного кошелька
+app.get('/wallet/savings/:wallet', async (req, res) => {
+    const { wallet } = req.params;
+
+    try {
+        const resultSavingsAndSpending = await calculateSavingsAndSpending(wallet);
+        res.json(resultSavingsAndSpending);
+    } catch (error) {
+        console.error(`Failed to calculate savings and spending for wallet ${wallet}: ${error.message}`);
+        res.status(500).send('Failed to calculate savings and spending');
+    }
+});
+
+// Эндпоинт для получения текущего депозита для конкретного кошелька
+app.get('/current-deposit/:walletAddress', async (req, res) => {
+    const walletAddress = req.params.walletAddress;
+
+    try {
+        const currentDeposit = await calculateCurrentDeposit(walletAddress);
+        res.json({ walletAddress, currentDeposit });
+    } catch (error) {
+        logError(`Failed to calculate current deposit for ${walletAddress}: ${error}`);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+// Эндпоинт для получения всех данных для конкретного кошелька
+app.get('/wallet/:walletAddress', async (req, res) => {
+
+    connectToWeb3Provider();
+
+    const walletAddress_ = req.params.walletAddress.toLowerCase();
+    
+    const walletAddress = normalizeAddress(walletAddress_);
+
+    // Если адрес некорректный, возвращаем значения по умолчанию
+    if (!walletAddress) {
+        logError('Invalid wallet address:', walletAddress_);
+        return res.json({
+            userDeposits: 0,
+            dsfLpBalance: 0,
+            safeRatioUser: 0,
+            availableToWithdraw: 0,
+            cvxShare: 0,
+            cvxCost: 0,
+            crvShare: 0,
+            crvCost: 0,
+            annualYieldRate: 0,
+            ethSpent: 0,
+            usdSpent: 0,
+            ethSaved: 0,
+            usdSaved: 0
+        });
+    }
+    
+    console.log('\nNormalized Address      :', walletAddress);
+
+    
+    if (!/^(0x)?[0-9a-f]{40}$/i.test(walletAddress)) {
+        logError("Адрес не соответствует ожидаемому формату.");
+    } else {
+        logSuccess("Адрес соответствует ожидаемому формату.");
+    }
+    
+    let connection;
+
+    connection = await pool.getConnection();
+
+    try {
+        // Проверяем наличие кошелька в базе данных unique_depositors
+        const [rows] = await connection.query('SELECT * FROM unique_depositors WHERE depositor_address = ?', [walletAddress]);
+        console.log("Rows from database:", rows);
+        
+        if (rows.length === 0) {
+            // Если кошелек не найден в unique_depositors, возвращаем пустые данные
+            logWarning('Wallet not found in unique_depositors.');
+            return res.json({
+                userDeposits: 0,
+                dsfLpBalance: 0,
+                safeRatioUser: 0,
+                availableToWithdraw: 0,
+                cvxShare: 0,
+                cvxCost: 0,
+                crvShare: 0,
+                crvCost: 0,
+                annualYieldRate: 0,
+                ethSpent: 0,
+                usdSpent: 0,
+                ethSaved: 0,
+                usdSaved: 0
+            });
+        }
+
+        // Проверяем наличие кошелька в базе данных wallet_info
+        const [walletRows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
+        console.log("Rows from database wallet_info:", walletRows);
+
+        if (walletRows.length === 0) {
+            // Если кошелек не найден в wallet_info, получаем данные и сохраняем их
+            console.log("Получаем данные кошелька");
+            try {
+                const walletData = await getWalletData(walletAddress);
+                
+                // Проверяем значения dsfLpBalance и safeRatioUser
+                if (walletData.dsfLpBalance > 0 || walletData.safeRatioUser > 0) {
+
+                    const insertQuery = `
+                        INSERT INTO wallet_info (
+                            wallet_address,
+                            user_deposits,
+                            dsf_lp_balance,
+                            ratio_user,
+                            available_to_withdraw,
+                            cvx_share,
+                            cvx_cost,
+                            crv_share,
+                            crv_cost,
+                            annual_yield_rate,
+                            eth_spent,
+                            usd_spent,
+                            eth_saved,
+                            usd_saved,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                    `;
+                    await connection.query(insertQuery, [
+                        walletAddress,
+                        walletData.userDeposits,
+                        walletData.dsfLpBalance,
+                        walletData.safeRatioUser,
+                        walletData.availableToWithdraw,
+                        walletData.cvxShare,
+                        walletData.cvxCost,
+                        walletData.crvShare,
+                        walletData.crvCost,
+                        walletData.annualYieldRate,
+                        walletData.ethSpent,
+                        walletData.usdSpent,
+                        walletData.ethSaved,
+                        walletData.usdSaved
+                    ]);
+                    // Отправляем полученные данные клиенту
+                    const serializedData = serializeBigints(walletData); // Сериализация данных
+                    res.json(serializedData); // Отправка сериализованных данных
+                } else {
+                    logWarning('Wallet balance or ratio is zero, not saving to DB.');
+                    res.json(walletData); // Возвращаем данные без сохранения
+                }
+            } catch (error) {
+                // Логируем ошибку и отправляем ответ сервера
+                logError('Failed to retrieve or insert wallet data:', error);
+                res.status(500).send('Internal Server Error');
+            }
+        } else {
+            // Если данные уже есть, возвращаем их
+            console.log("Данные кошелька уже есть");
+            res.json(walletRows[0]);
+        }
+    } catch (error) {
+        // Обработка ошибок при соединении или выполнении SQL-запроса
+        logError('Database connection or operation failed:', error);
+        res.status(500).send('Internal Server Error');
+    } finally {
+        // Освобождение соединения
+        if (connection) {
+            connection.release();
+        }
+    }
+});
+
+
+
+// Вызов функции обновления всех кошельков раз в 3 часа
+cron.schedule('0 */3 * * *', async () => {
+    console.log('Running a task every 3 hours');
+    updateAllWallets(); // Вызов функции обновления всех кошельков
+});
+
+// NEW Разблокировать после теста
+// Создаем cron-задачу для периодического обновления данных APY каждый час
+cron.schedule('0 */1 * * *', async () => {
+    logInfo('Fetching APY data... Every 1 hours');
+    await addNewDayApyData();
+}); 
+
+// Создаем cron-задачу для периодического обновления данных APY 
+// cron.schedule('* * * * *', async () => {
+//     logInfo('Fetching APY data... Every minute');
+//     await addNewDayApyData(); 
+// });
+
+// NEW
+// Создаем cron-задачу для периодического обновления данных APY каждую неделю в понедельник в 00:00
+cron.schedule('0 0 * * 1', async () => {
+    logInfo('Fetching APY data... Every 1 week');
+    await updateApyData();
+});
+
+
 
 //
 //
@@ -1852,182 +2081,6 @@ function toBigIntDiv(value, decimals) {
 }
 
 // NEW
-// Маршрут для получения событий кошелька
-app.get('/events/:walletAddress', async (req, res) => {
-    try {
-        const walletAddress = req.params.walletAddress.toLowerCase();
-        console.log(`Received request to fetch events for wallet address: ${walletAddress}`);
-
-        // Подключаемся к провайдеру Ethereum
-        console.log(`Fetching events for wallet address: ${walletAddress}`);
-
-        // Список интересующих нас событий
-        const eventNames = [
-            'CreatedPendingDeposit',
-            'CreatedPendingWithdrawal',
-            'Deposited',
-            'Withdrawn',
-            'Transfer',
-            'FailedDeposit',
-            'FailedWithdrawal'
-        ];
-
-        // Получаем все интересующие нас события контракта
-        const eventsPromises = eventNames.map(eventName =>
-            contractDSF.getPastEvents(eventName, {
-                fromBlock: 0,
-                toBlock: 'latest'
-            })
-        );
-
-        // Ждем выполнения всех запросов на события
-        const allEvents = await Promise.all(eventsPromises);
-
-        // Объединяем все события в один массив
-        const events = allEvents.flat();
-
-        // Фильтруем события по адресу кошелька
-        const walletEvents = events.filter(event => {
-            const returnValues = Object.values(event.returnValues).map(value =>
-                typeof value === 'string' ? value.toLowerCase() : value
-            );
-            return returnValues.includes(walletAddress);
-        });
-
-        // Добавляем дату события и стоимость транзакции к каждому событию
-        const walletEventsWithDetails = await Promise.all(walletEvents.map(async event => {
-            const block = await web3.eth.getBlock(event.blockNumber);
-            const eventDate = new Date(Number(block.timestamp) * 1000);
-            const transaction = await web3.eth.getTransaction(event.transactionHash);
-            const receipt = await web3.eth.getTransactionReceipt(event.transactionHash);
-            const gasUsed = BigInt(receipt.gasUsed);
-            const gasPrice = BigInt(transaction.gasPrice);
-            const transactionCostEth = web3.utils.fromWei((gasUsed * gasPrice).toString(), 'ether');
-
-            // Получаем стоимость ETH в долларах на момент выполнения транзакции
-            const ethUsdPrice = await getEthUsdPrice(Number(block.timestamp));
-            const transactionCostUsd = (parseFloat(transactionCostEth) * ethUsdPrice).toFixed(2);
-
-            let formattedEvent = {
-                event: event.event,
-                eventDate: eventDate.toISOString(),
-                transactionCostEth: transactionCostEth,
-                transactionCostUsd: transactionCostUsd,
-                wallet_address: walletAddress
-            };
-
-            // Форматируем returnValues в зависимости от типа события
-            switch (event.event) {
-                case 'CreatedPendingDeposit':
-                    formattedEvent.returnValues = {
-                        depositor: event.returnValues.depositor,
-                        amounts: {
-                            DAI: toBigIntDiv(event.returnValues.amounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.amounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.amounts[2], 6)
-                        }
-                    };
-                    break;
-                case 'CreatedPendingWithdrawal':
-                    formattedEvent.returnValues = {
-                        withdrawer: event.returnValues.withdrawer,
-                        lpShares: toBigIntDiv(event.returnValues.lpShares, 18),
-                        tokenAmounts: {
-                            DAI: toBigIntDiv(event.returnValues.tokenAmounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.tokenAmounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.tokenAmounts[2], 6)
-                        }
-                    };
-                    break;
-                case 'Deposited':
-                    formattedEvent.returnValues = {
-                        depositor: event.returnValues.depositor,
-                        amounts: {
-                            DAI: toBigIntDiv(event.returnValues.amounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.amounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.amounts[2], 6)
-                        },
-                        lpShares: toBigIntDiv(event.returnValues.lpShares, 18)
-                    };
-                    break;
-                case 'Withdrawn':
-                    formattedEvent.returnValues = {
-                        withdrawer: event.returnValues.withdrawer,
-                        withdrawalType: event.returnValues.withdrawalType.toString(),
-                        tokenAmounts: {
-                            DAI: toBigIntDiv(event.returnValues.tokenAmounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.tokenAmounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.tokenAmounts[2], 6)
-                        },
-                        lpShares: toBigIntDiv(event.returnValues.lpShares, 18),
-                        tokenIndex: event.returnValues.tokenIndex.toString()
-                    };
-                    break;
-                case 'Transfer':
-                    if (event.returnValues.from !== '0x0000000000000000000000000000000000000000' &&
-                        event.returnValues.to !== '0x0000000000000000000000000000000000000000' &&
-                        event.returnValues.from.toLowerCase() !== contractDSF.options.address.toLowerCase() &&
-                        event.returnValues.to.toLowerCase() !== contractDSF.options.address.toLowerCase()) {
-                        formattedEvent.returnValues = {
-                            from: event.returnValues.from,
-                            to: event.returnValues.to,
-                            value: toBigIntDiv(event.returnValues.value, 18)
-                        };
-                    }
-                    break;
-                case 'FailedDeposit':
-                    formattedEvent.returnValues = {
-                        depositor: event.returnValues.depositor,
-                        amounts: {
-                            DAI: toBigIntDiv(event.returnValues.amounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.amounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.amounts[2], 6)
-                        },
-                        lpShares: toBigIntDiv(event.returnValues.lpShares, 18)
-                    };
-                    break;
-                case 'FailedWithdrawal':
-                    formattedEvent.returnValues = {
-                        withdrawer: event.returnValues.withdrawer,
-                        amounts: {
-                            DAI: toBigIntDiv(event.returnValues.amounts[0], 18),
-                            USDC: toBigIntDiv(event.returnValues.amounts[1], 6),
-                            USDT: toBigIntDiv(event.returnValues.amounts[2], 6)
-                        },
-                        lpShares: toBigIntDiv(event.returnValues.lpShares, 18)
-                    };
-                    break;
-            }
-
-            // Вставляем событие в таблицу
-            await insertEvent(formattedEvent);
-
-            return formattedEvent;
-        }));
-
-        // Исключаем события Transfer, которые не прошли фильтр
-        const filteredWalletEventsWithDetails = walletEventsWithDetails.filter(event => event.returnValues);
-
-        // Логируем отфильтрованные события
-        filteredWalletEventsWithDetails.forEach(event => {
-            console.log(`Event: ${event.event}`);
-            console.log(`Return Values: ${JSON.stringify(event.returnValues)}`);
-            console.log(`Event Date: ${event.eventDate}`);
-            console.log(`Transaction Cost: ${event.transactionCostEth} ETH`);
-            console.log(`Transaction Cost in USD: ${event.transactionCostUsd} USD`);
-            console.log('----------------------------');
-        });
-
-        console.log(`Fetched ${filteredWalletEventsWithDetails.length} events for wallet address: ${walletAddress}`);
-
-        res.json(filteredWalletEventsWithDetails);
-    } catch (error) {
-        console.error(`Failed to fetch events for wallet address ${req.params.walletAddress}:`, error);
-        res.status(500).send('Failed to fetch events');
-    }
-});
-
-// NEW
 // Инициализация базы данных
 async function insertEvent(event) {
     let connection;
@@ -2054,26 +2107,27 @@ async function insertEvent(event) {
     }
 }
 
-
 //
 //
 // Все эвенты
 //
 //
 
-
 // Функция для получения номера блока по дате
 async function getBlockNumberByDate(date) {
     const timestamp = Math.floor(date.getTime() / 1000);
 
-    const response = await axios.get(`https://api.etherscan.io/api`, {
-        params: {
-            module: 'block',
-            action: 'getblocknobytime',
-            timestamp: timestamp,
-            closest: 'before',
-            apikey: process.env.ETHERSCAN_API_KEY
-        }
+    const response = await retryEtherscan(async () => {
+        const apiKey = getNextEtherscanApiKey();
+        return await axios.get(`https://api.etherscan.io/api`, {
+            params: {
+                module: 'block',
+                action: 'getblocknobytime',
+                timestamp: timestamp,
+                closest: 'before',
+                apikey: apiKey  // Используем переключение API ключей
+            }
+        });
     });
 
     if (response.data && response.data.result) {
@@ -2090,12 +2144,16 @@ async function getEthUsdPrice(date) {
 
     while (retries < maxRetries) {
         try {
-            const response = await axios.get(`https://api.etherscan.io/api`, {
-                params: {
-                    module: 'stats',
-                    action: 'ethprice',
-                    apikey: getNextEtherscanApiKey()
-                }
+
+            const response = await retryEtherscan(async () => {
+                const apiKey = getNextEtherscanApiKey();
+                return await axios.get(`https://api.etherscan.io/api`, {
+                    params: {
+                        module: 'stats',
+                        action: 'ethprice',
+                        apikey: apiKey  // Используем переключение API ключей
+                    }
+                });
             });
 
             if (response.data && response.data.result) {
@@ -2117,6 +2175,7 @@ async function getEthUsdPrice(date) {
 }
 
 let initializationCompleted = false; // Изначально инициализация не завершена
+let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
 
 // Функция для начальной инициализации отсутствующих событий
 async function initializeMissingEvents() {
@@ -2131,8 +2190,8 @@ async function initializeMissingEvents() {
 
         if (lastEventBlock >= latestBlock) {
             console.log(`No new blocks to process.`);
-            initializationCompleted = true; // Инициализация завершена
-            console.log(`checkForNewEvents : activated (${initializationCompleted})`);
+            initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
+            console.log(`telegramBotEvets : activated (${initializationTelegramBotEvents})`);
             return;
         }
 
@@ -2143,73 +2202,173 @@ async function initializeMissingEvents() {
         await storeEvents(events);
 
         console.log(`Fetched and stored missing events up to block ${latestBlock}.`);
-        initializationCompleted = true; // Инициализация завершена
-        console.log(`checkForNewEvents : activated (${initializationCompleted})`);
+        initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
+        console.log(`telegramBotEvets : activated (${initializationTelegramBotEvents})`);
     } catch (error) {
-        console.error(`Failed to initialize missing events: ${error}`);
+        logError(`Failed to initialize missing events: ${error}`);
     }
 }
 
-// 1
+//New2
+// Функция для записи последнего проверенного блока в базу данных
+async function updateLastCheckedBlock(blockNumber) {
+    try {
+        // const updateQuery = `UPDATE settings SET setting_value = ? WHERE setting_key = 'last_checked_block'`;
+        // await pool.query(updateQuery, [blockNumber.toString()]);
+        //console.log(`Updated last checked block to ${blockNumber}`);
+        const updateQuery = `INSERT INTO settings (setting_key, value) VALUES ('last_checked_block', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)`;
+        await pool.query(updateQuery, [blockNumber.toString()]);
+    } catch (error) {
+        console.error(`Failed to update last checked block: ${error.message}`);
+    }
+}
+//New2
+// Функция для получения последнего проверенного блока из базы данных
+async function getLastCheckedBlock() {
+    const selectQuery = `SELECT value FROM settings WHERE setting_key = 'last_checked_block'`;
+    const [rows] = await pool.query(selectQuery);
+    return rows.length ? BigInt(rows[0].value) : BigInt(0);
+}
+
+// 1 //New2
 // Функция для проверки наличия новых событий
 async function checkForNewEvents() {
     if (!initializationCompleted) {
+        //console.log('Initialization not completed. Skipping check for new events.');
         return;
     }
-    try {
-        console.log('Checking for new events...');
 
+    initializationCompleted = false;
+
+    try {
+        logWarning('Checking for new events...');
+
+        // Получение номера последнего блока с событиями из базы данных
         const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
+        //console.log(`Last event block from database: ${lastEventBlock}`);
 
-        const latestBlock = await fetchLatestBlockFromEtherscan();
+        // Получаем номер последнего блока из Etherscan
+        const latestBlock = BigInt(await fetchLatestBlockFromEtherscan());
+        //console.log(`Latest block from Etherscan: ${latestBlock}`);
+        
+        // Получение номера последнего проверенного блока из таблицы settings
+        const lastCheckedBlock = BigInt(await getLastCheckedBlock());
+        //console.log(`Last checked block from settings: ${lastCheckedBlock}`);
 
-        if (lastEventBlock >= latestBlock) {
-            console.log('No new blocks to process.');
-            return;
+        // Общее логирование информации о блоках
+        console.log(`Block Info - Last event block from database: ${lastEventBlock}, Latest block from Etherscan: ${latestBlock}, Last checked block from settings: ${lastCheckedBlock}`);
+
+        // Выбор начального блока для проверки
+        let fromBlock;
+        if (lastCheckedBlock === BigInt(0)) {
+            fromBlock = lastEventBlock + BigInt(1);
+        } else if (lastEventBlock >= lastCheckedBlock) {
+            fromBlock = lastEventBlock + BigInt(1);
+        } else {
+            fromBlock = lastCheckedBlock + BigInt(1);
         }
 
-        let fromBlock = lastEventBlock + BigInt(1);
+        if (fromBlock > latestBlock) {
+            console.log('No new blocks to process.');
+            initializationCompleted = true;
+            return;
+        }
+        
+        let newEventsFetched = false;
+        let autoCompoundAllFound = false; // Флаг для проверки события AutoCompoundAll
+        
+        // Проверка новых блоков на события
         while (fromBlock <= latestBlock) {
-            const toBlock = fromBlock + BigInt(10) <= latestBlock ? fromBlock + BigInt(9999) : latestBlock;
+            const toBlock = fromBlock + BigInt(1000) <= latestBlock ? fromBlock + BigInt(9999) : latestBlock;
 
-            console.log(`Checking blocks from ${fromBlock} to ${toBlock}`);
+            process.stdout.write(`Checking blocks from ${fromBlock} to ${toBlock} - `);
 
+            // Получение событий в диапазоне блоков
             const events = await fetchEventsWithRetry(fromBlock, toBlock);
 
             if (events.length > 0) {
                 await storeEvents(events, true); // Сохраняем новые события в базе данных. Передаем true, чтобы указывать, что это новые события 
-                await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
-                await updateAllWallets(); // Обновляем все кошельки
+                newEventsFetched = true; // Устанавливаем флаг, если есть новые события
+                console.log(`Stored ${events.length} events from blocks ${fromBlock} to ${toBlock}`);
+            
+                // Проверка на наличие события AutoCompoundAll
+                if (events.some(event => event.event === 'AutoCompoundAll')) {
+                    autoCompoundAllFound = true;
+                }
+            }
+
+            // Проверка блока на наличие других эвентов, если есть 'Deposited' или 'Withdrawn'
+            for (const event of events) {
+                if (['Deposited', 'Withdrawn'].includes(event.event)) {
+                    const blockNumber = event.blockNumber;
+                    const blockEvents = await fetchEventsUsingWeb3(blockNumber, blockNumber);
+                    await storeEvents(blockEvents, true); // Сохранение дополнительных событий
+                    newEventsFetched = true; // Устанавливаем флаг, если есть новые события
+                    console.log(`Additional events found in block ${blockNumber} and stored`);
+                
+                    // Проверка на наличие события AutoCompoundAll среди дополнительных событий
+                    if (blockEvents.some(event => event.event === 'AutoCompoundAll')) {
+                        autoCompoundAllFound = true;
+                    }
+                }
             }
             
             fromBlock = toBlock + BigInt(1);
         }
+    
+        if (newEventsFetched) {
+            logSuccess('New events found, updating unique depositors and wallets.');
+            await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
+            await updateAllWallets(); // Обновляем все кошельки
+        }
 
-        console.log(`Fetched and stored new events up to block ${latestBlock}.`);
+        //process.stdout.write(`Fetched and stored new events up to block ${latestBlock}.`);
+        await updateLastCheckedBlock(latestBlock); // Обновляем последний проверенный блок на latestBlock
+        console.log(`Fetched and stored new events up to block & Last checked block updated to ${latestBlock}`);
+
+        // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
+        if (autoCompoundAllFound) {
+            logWarning('AutoCompoundAll event found, calculating incomeDSF...');
+            await calculateIncomeDSF();
+        }
+
     } catch (error) {
-        console.error('Failed to check for new events:', error);
+        if (error.code === 'PROTOCOL_CONNECTION_LOST') {
+            logError('Connection lost. Reconnecting...');
+            await createPool(); // Создаем новый пул соединений
+        }
+        logError(`Failed to check for new events: ${error}`);
+    } finally {
+        initializationCompleted = true;
     }
 }
 
 /// 1
 // Функция для получения событий из Etherscan
 async function fetchLatestBlockFromEtherscan() {
-    const apiKey = getNextEtherscanApiKey();
-    const response = await axios.get(`https://api.etherscan.io/api`, {
-        params: {
-            module: 'proxy',
-            action: 'eth_blockNumber',
-            apikey: apiKey
-        }
-    });
+    try {
+        const response = await retryEtherscan(async () => {
+            const apiKey = getNextEtherscanApiKey();
+            return await axios.get(`https://api.etherscan.io/api`, {
+                params: {
+                    module: 'proxy',
+                    action: 'eth_blockNumber',
+                    apikey: apiKey  // Используем переключение API ключей
+                }
+            });
+        });
 
-    if (response.data && response.data.result) {
-        return BigInt(response.data.result);
-    } else {
-        console.error('Failed to fetch latest block number from Etherscan:', response.data);
-        throw new Error('Failed to fetch latest block number from Etherscan');
+        if (response.data && response.data.result) {
+            return BigInt(response.data.result);
+        } else {
+            console.error('Failed to fetch latest block number from Etherscan:', response.data);
+            throw new Error('Failed to fetch latest block number from Etherscan');
+        }
+    } catch (error) {
+        logError(`An error occurred while fetching the latest block number: ${error}`);
+        throw error;
     }
 }
 
@@ -2225,6 +2384,7 @@ async function fetchEventsWithRetry(fromBlock, toBlock, retries = 3) {
                 await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
                 attempt++;
             } else {
+                logError(`Error fetching events from ${fromBlock} to ${toBlock}: ${error.message}`);
                 throw error;
             }
         }
@@ -2247,15 +2407,34 @@ async function fetchEventsUsingWeb3(fromBlock, toBlock) {
         'ClaimedAllManagementFee'
     ];
 
-    const eventsPromises = eventNames.map(eventName =>
-        contractDSF.getPastEvents(eventName, {
-            fromBlock: fromBlock.toString(),
-            toBlock: toBlock.toString()
-        })
-    );
+    try {
+        // console.log(`Fetching events from block ${fromBlock} to ${toBlock}`);
+        // console.log(`Event names: ${eventNames.join(', ')}`);
 
-    const allEvents = await Promise.all(eventsPromises);
-    return allEvents.flat();
+        const eventsPromises = eventNames.map(async eventName => {
+            const events = await contractDSF.getPastEvents(eventName, {
+                fromBlock: fromBlock.toString(),
+                toBlock: toBlock.toString()
+            });
+            //await new Promise(resolve => setTimeout(resolve, 1000)); // Задержка 1 секунда между запросами для разных событий
+            return events;
+        });
+
+        const allEvents = await Promise.all(eventsPromises);
+        const flatEvents = allEvents.flat();
+        console.log(`Fetched ${flatEvents.length} events`);
+        
+        return flatEvents;
+    } catch (error) {
+        if (error.message.includes('rate limit')) {
+            console.log('Rate limit exceeded, waiting before retrying...');
+            await new Promise(res => setTimeout(res, 20000)); // Ждем 20 секунд перед повторной попыткой
+            return fetchEventsUsingWeb3(fromBlock, toBlock);
+        } else {
+            console.error(`Error fetching events from block ${fromBlock} to ${toBlock}: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 function convertBigIntToString(obj) {
@@ -2300,11 +2479,13 @@ async function storeEvents(events, isNewEvents = false) {
     }
 
     // Process non-Transfer events first
+    // Сначала обрабатываем события, отличные от Transfer
     for (const event of otherEvents) {
         await processEvent(event, isNewEvents);
     }
 
     // Process Transfer events
+    // Затем обрабатываем события Transfer
     for (const event of transferEvents) {
         await processEvent(event, isNewEvents);
     }
@@ -2341,6 +2522,8 @@ async function processEvent(event, isNewEvents) {
         returnValues: {}
     };
 
+    const blockNumberStr = event.blockNumber.toString();
+
     switch (event.event) {
         case 'CreatedPendingDeposit':
             formattedEvent.returnValues = {
@@ -2351,6 +2534,20 @@ async function processEvent(event, isNewEvents) {
                     USDT: formatBigInt(event.returnValues.amounts[2], 6)
                 }
             };
+
+            if (initializationTelegramBotEvents) {
+                const message = `Event 'CreatedPendingDeposit' detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nWallet : ${event.returnValues.depositor}
+                    \n
+                    \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
+                    \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
+                    \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
+                console.log(message);
+                sendMessageToChat(message);
+            };
+        
             break;
         case 'CreatedPendingWithdrawal':
             formattedEvent.returnValues = {
@@ -2362,32 +2559,96 @@ async function processEvent(event, isNewEvents) {
                     USDT: formatBigInt(event.returnValues.tokenAmounts[2], 6)
                 }
             };
+
+            if (initializationTelegramBotEvents) {
+                const message = `Event 'CreatedPendingWithdrawal' detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nWallet : ${event.returnValues.withdrawer}
+                    \n
+                    \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
+                    \n
+                    \nDAI    : ${formatBigInt(event.returnValues.tokenAmounts[0], 18)}
+                    \nUSDC   : ${formatBigInt(event.returnValues.tokenAmounts[1], 6)}
+                    \nUSDT   : ${formatBigInt(event.returnValues.tokenAmounts[2], 6)}`;
+                console.log(message);
+                sendMessageToChat(message);
+            };
+
             break;
-        case 'Deposited':
+        case 'Deposited': 
+            const transactionsD_status = await showBlockTransactions(contractsLib.DSFwallet, blockNumberStr);     
+            logError(transactionsD_status)
             formattedEvent.returnValues = {
                 depositor: event.returnValues.depositor,
                 amounts: {
                     DAI: formatBigInt(event.returnValues.amounts[0], 18),
                     USDC: formatBigInt(event.returnValues.amounts[1], 6),
                     USDT: formatBigInt(event.returnValues.amounts[2], 6)
-                },
-                lpShares: formatBigInt(event.returnValues.lpShares, 18)
-            };
-            break;
-        case 'Withdrawn':
-            formattedEvent.returnValues = {
-                withdrawer: event.returnValues.withdrawer,
-                withdrawalType: event.returnValues.withdrawalType.toString(),
-                tokenAmounts: {
-                    DAI: formatBigInt(event.returnValues.tokenAmounts[0], 18),
-                    USDC: formatBigInt(event.returnValues.tokenAmounts[1], 6),
-                    USDT: formatBigInt(event.returnValues.tokenAmounts[2], 6)
                 },
                 lpShares: formatBigInt(event.returnValues.lpShares, 18),
-                tokenIndex: event.returnValues.tokenIndex.toString()
+                transaction_status: transactionsD_status
             };
+
+            if (initializationTelegramBotEvents) {
+                const message = `Event 'Deposited' ${transactionsD_status} detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nWallet : ${event.returnValues.depositor}
+                    \n
+                    \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
+                    \n
+                    \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
+                    \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
+                    \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
+                console.log(message);
+                sendMessageToChat(message);
+            };
+
             break;
+        case 'Withdrawn':
+                const transactionsW_status = await showBlockTransactions(contractsLib.DSFwallet, blockNumberStr);
+                logError(transactionsW_status)
+                const realWithdrawnDAI = await getDAITransactionsByBlock(event.returnValues.withdrawer, blockNumberStr);
+                const realWithdrawnUSDC = await getUSDCTransactionsByBlock(event.returnValues.withdrawer, blockNumberStr);
+                const realWithdrawnUSDT = await getUSDTTransactionsByBlock(event.returnValues.withdrawer, blockNumberStr);
+                formattedEvent.returnValues = {
+                    withdrawer: event.returnValues.withdrawer,
+                    withdrawalType: event.returnValues.withdrawalType.toString(),
+                    tokenAmounts: {
+                        DAI: formatBigInt(event.returnValues.tokenAmounts[0], 18),
+                        USDC: formatBigInt(event.returnValues.tokenAmounts[1], 6),
+                        USDT: formatBigInt(event.returnValues.tokenAmounts[2], 6)
+                    },
+                    lpShares: formatBigInt(event.returnValues.lpShares, 18),
+                    tokenIndex: event.returnValues.tokenIndex.toString(),
+                    transaction_status: transactionsW_status,
+                    realWithdrawnAmount: {
+                        DAI: realWithdrawnDAI,
+                        USDC: realWithdrawnUSDC,
+                        USDT: realWithdrawnUSDT
+                    }
+                };
+
+                if (initializationTelegramBotEvents) {
+                    const message = `Event 'Withdrawn' ${transactionsW_status} detected!
+                        \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                        \n
+                        \nWallet : ${event.returnValues.withdrawer}
+                        \n
+                        \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
+                        \n
+                        \nDAI    : ${realWithdrawnDAI}
+                        \nUSDC   : ${realWithdrawnUSDC}
+                        \nUSDT   : ${realWithdrawnUSDT}`;
+                    console.log(message);
+                    sendMessageToChat(message);
+                };
+
+                break;
         case 'FailedDeposit':
+            const transactionsFD_status = await showBlockTransactions(contractsLib.DSFwallet, blockNumberStr);     
+            logError(transactionsFD_status)
             formattedEvent.returnValues = {
                 depositor: event.returnValues.depositor,
                 amounts: {
@@ -2395,10 +2656,29 @@ async function processEvent(event, isNewEvents) {
                     USDC: formatBigInt(event.returnValues.amounts[1], 6),
                     USDT: formatBigInt(event.returnValues.amounts[2], 6)
                 },
-                lpShares: formatBigInt(event.returnValues.lpShares, 18)
+                lpShares: formatBigInt(event.returnValues.lpShares, 18),
+                transaction_status: transactionsFD_status
             };
+
+            if (initializationTelegramBotEvents) {
+                const message = `Event 'FailedDeposit' ${transactionsFD_status} detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nWallet : ${event.returnValues.depositor}
+                    \n
+                    \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
+                    \n
+                    \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
+                    \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
+                    \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
+                console.log(message);
+                sendMessageToChat(message);
+            };
+
             break;
         case 'FailedWithdrawal':
+            const transactionsFW_status = await showBlockTransactions(contractsLib.DSFwallet, blockNumberStr);     
+            logError(transactionsFW_status)
             formattedEvent.returnValues = {
                 withdrawer: event.returnValues.withdrawer,
                 amounts: {
@@ -2406,17 +2686,65 @@ async function processEvent(event, isNewEvents) {
                     USDC: formatBigInt(event.returnValues.amounts[1], 6),
                     USDT: formatBigInt(event.returnValues.amounts[2], 6)
                 },
-                lpShares: formatBigInt(event.returnValues.lpShares, 18)
+                lpShares: formatBigInt(event.returnValues.lpShares, 18),
+                transaction_status: transactionsFW_status
             };
+
+            if (initializationTelegramBotEvents) {
+                const message = `Event 'FailedWithdrawal' ${transactionsFW_status} detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nWallet : ${event.returnValues.withdrawer}
+                    \n
+                    \nDSF LP : ${formatBigInt(event.returnValues.lpShares, 18)}
+                    \n
+                    \nDAI    : ${formatBigInt(event.returnValues.amounts[0], 18)}
+                    \nUSDC   : ${formatBigInt(event.returnValues.amounts[1], 6)}
+                    \nUSDT   : ${formatBigInt(event.returnValues.amounts[2], 6)}`;
+                console.log(message);
+                sendMessageToChat(message);
+            };
+
             break;
         case 'AutoCompoundAll':
-            formattedEvent.returnValues = {};
-            break;
+                logWarning(`addressesStrategy : ${addressesStrategy}`);
+                // Проверка, что addressesStrategy определен и является массивом
+                if (!Array.isArray(addressesStrategy) || addressesStrategy.length === 0) {
+                    logError(`addressesStrategy должен быть массивом и не должен быть пустым.`);
+                    throw new Error('addressesStrategy должен быть массивом и не должен быть пустым.');
+                }
+    
+                // Преобразование blockNumber в строку, если это число
+                const balanceDifference = await getBalanceDifferencesForAddresses(addressesStrategy, blockNumberStr);
+                formattedEvent.returnValues = {
+                    incomeDSF: Number(balanceDifference)
+                };
+
+                if (initializationTelegramBotEvents) {
+                    const message = `Event 'AutoCompoundAll' detected!
+                        \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                        \n
+                        \nIncome : ${Number(balanceDifference)}`;
+                    console.log(message);
+                    sendMessageToChat(message);
+                };
+
+                break;
         case 'ClaimedAllManagementFee':
-            formattedEvent.returnValues = {
-                feeValue: formatBigInt(event.returnValues.feeValue, 18)
-            };
-            break;
+                formattedEvent.returnValues = {
+                    feeValue: formatBigInt(event.returnValues.feeValue, 6)
+                };
+
+                if (initializationTelegramBotEvents) {
+                    const message = `Event 'ClaimedAllManagementFee' detected!
+                        \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                        \n
+                        \nFee    : ${formatBigInt(event.returnValues.feeValue, 6)}`;
+                    console.log(message);
+                    sendMessageToChat(message);
+                };
+
+                break;
         case 'Transfer':
             if (
                 event.returnValues.from !== '0x0000000000000000000000000000000000000000' &&
@@ -2445,6 +2773,19 @@ async function processEvent(event, isNewEvents) {
                     value: formatBigInt(event.returnValues.value, 18),
                     usdValue: usdValue
                 };
+
+                if (initializationTelegramBotEvents) {
+                    const message = `Event 'Transfer' detected!
+                    \nURL    : https://etherscan.io/tx/${event.transactionHash}
+                    \n
+                    \nFrom   : ${event.returnValues.from}
+                    \nTo     : ${event.returnValues.to}
+                    \n
+                    \nDSF LP : ${formatBigInt(event.returnValues.value, 18)}`;
+                    console.log(message);
+                    sendMessageToChat(message);
+                };
+
             }
             break;
     }
@@ -2526,7 +2867,6 @@ async function calculateTransferUSDValue(event) {
         return parseFloat(withdrawRecords[0].availableToWithdraw).toFixed(2);
     }
 
-
     const [events] = await pool.query(
         `SELECT * FROM contract_events 
          WHERE JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ? 
@@ -2589,7 +2929,7 @@ async function calculateTransferUSDValue(event) {
         console.log(`No lpShares available for address: ${address}`);
         return 0;
     }
-    // хм
+    
     const usdValue = (balanceUSD / lpShares) * parseFloat(event.returnValues.value) / Math.pow(10, 18); 
     console.log(`Calculated USD value for Transfer event: ${event.transactionHash} is ${usdValue}`);
     return usdValue.toFixed(2);
@@ -2631,6 +2971,28 @@ app.get('/events', async (req, res) => {
     } catch (error) {
         console.error('Failed to fetch contract events:', error);
         res.status(500).send('Failed to fetch contract events');
+    }
+});
+
+// Эндпоинт для получения событий, связанных с конкретным кошельком
+app.get('/events/:wallet', async (req, res) => {
+    const { wallet } = req.params;
+    
+    try {
+        const query = `
+            SELECT * FROM contract_events 
+            WHERE JSON_EXTRACT(returnValues, '$.depositor') = ?
+            OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?
+            OR JSON_EXTRACT(returnValues, '$.to') = ?
+            OR JSON_EXTRACT(returnValues, '$.from') = ?
+            ORDER BY blockNumber ASC
+        `;
+        
+        const [rows] = await pool.query(query, [wallet, wallet, wallet, wallet]);
+        res.json(rows);
+    } catch (error) {
+        console.error(`Failed to fetch events for wallet ${wallet}: ${error.message}`);
+        res.status(500).send('Failed to fetch events');
     }
 });
 
@@ -2906,10 +3268,6 @@ async function calculatePersonalYieldRate() {
 }
 
 
-
-//        logError(`Failed to calculate personal yield rates: ${error}`);
-
-
 // Создаем cron-задачу для ежедневного обновления персональной ставки доходности
 cron.schedule('0 0 * * *', async () => {
     logInfo('Calculating personal yield rates...');
@@ -2967,20 +3325,530 @@ app.get('/wallets-apy/:walletAddress', async (req, res) => {
 });
 
 
+// Расчет дохода DSF через получение USDT на адрес стратегии, а также реальныхсумм при выводе пользователей
+
+// Функция для получения всех транзакций DAI по указанному адресу
+async function getDAITransactions(address) {
+        
+    const response = await retryEtherscan(async () => {
+        const apiKey = getNextEtherscanApiKey();
+        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0x6B175474E89094C44Da98b954EedeAC495271d0F&apikey=${apiKey}`;
+        return await axios.get(url);
+    });
+    
+    if (response.data.status === '1' && response.data.message === 'OK') {
+        //console.log(`DAI transactions for address ${address}`, response.data.result);
+        return response.data.result;
+    } else {
+        console.warn(`No DAI transactions found for address ${address}`);
+        return [];
+    }
+}
+
+// Функция для получения всех транзакций USDC по указанному адресу
+async function getUSDCTransactions(address) {
+        
+    const response = await retryEtherscan(async () => {
+        const apiKey = getNextEtherscanApiKey();
+        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&apikey=${apiKey}`;
+        return await axios.get(url);
+    });
+    
+    if (response.data.status === '1' && response.data.message === 'OK') {
+        //console.log(`USDC transactions for address ${address}`, response.data.result);
+        return response.data.result;
+    } else {
+        console.warn(`No USDC transactions found for address ${address}`);
+        return [];
+    }
+}
+
+// Функция для получения всех транзакций USDT по указанному адресу
+async function getUSDTTransactions(address) {
+        
+    const response = await retryEtherscan(async () => {
+        const apiKey = getNextEtherscanApiKey();
+        const url = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&contractaddress=0xdac17f958d2ee523a2206206994597c13d831ec7&apikey=${apiKey}`;
+        return await axios.get(url);
+    });
+    
+    if (response.data.status === '1' && response.data.message === 'OK') {
+        //console.log(`USDT transactions for address ${address}`, response.data.result);
+        return response.data.result;
+    } else {
+        console.warn(`No USDT transactions found for address ${address}`);
+        return [];
+    }
+}
+
+// Функция для получения пополнений и выводов DAI по указанному блоку для указанного адреса
+async function getDAITransactionsByBlock(address, blockNumber) {
+
+    // console.log('Тип данных address:', typeof address);
+    // console.log('Тип данных blockNumber:', typeof blockNumber);
+    // console.log('Значение address:', address);
+    // console.log('Значение blockNumber:', blockNumber);
+
+    try {
+        const transactions = await getDAITransactions(address);
+        const filteredTransactions = transactions.filter(tx => tx.blockNumber === blockNumber);
+
+        const deposits = filteredTransactions.filter(tx => tx.to.toLowerCase() === address.toLowerCase());
+        const withdrawals = filteredTransactions.filter(tx => tx.from.toLowerCase() === address.toLowerCase());
+
+        const totalDeposits = deposits.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 18)), 0);
+        const totalWithdrawals = withdrawals.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 18)), 0);
+
+        const balanceDifference = totalDeposits - totalWithdrawals;
+
+        // console.log(` - Deposits for address ${address} in block ${blockNumber}:`, deposits);
+        // console.log(` - Withdrawals for address ${address} in block ${blockNumber}:`, withdrawals);
+        // console.log(` - Total Deposits: ${totalDeposits}, Total Withdrawals: ${totalWithdrawals}`);
+        // console.log(` - Balance Difference: ${balanceDifference}`);
+
+        return balanceDifference;
+    } catch (error) {
+        logError(`Failed to get DAI transactions for address ${address} in block ${blockNumber}: ${error}`);
+        throw new Error('Failed to get DAI transactions');
+    }
+}
+
+// Функция для получения пополнений и выводов USDC по указанному блоку для указанного адреса
+async function getUSDCTransactionsByBlock(address, blockNumber) {
+
+    // console.log('Тип данных address:', typeof address);
+    // console.log('Тип данных blockNumber:', typeof blockNumber);
+    // console.log('Значение address:', address);
+    // console.log('Значение blockNumber:', blockNumber);
+
+    try {
+        const transactions = await getUSDCTransactions(address);
+        const filteredTransactions = transactions.filter(tx => tx.blockNumber === blockNumber);
+
+        const deposits = filteredTransactions.filter(tx => tx.to.toLowerCase() === address.toLowerCase());
+        const withdrawals = filteredTransactions.filter(tx => tx.from.toLowerCase() === address.toLowerCase());
+
+        const totalDeposits = deposits.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 6)), 0);
+        const totalWithdrawals = withdrawals.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 6)), 0);
+
+        const balanceDifference = totalDeposits - totalWithdrawals;
+
+        // console.log(` - Deposits for address ${address} in block ${blockNumber}:`, deposits);
+        // console.log(` - Withdrawals for address ${address} in block ${blockNumber}:`, withdrawals);
+        // console.log(` - Total Deposits: ${totalDeposits}, Total Withdrawals: ${totalWithdrawals}`);
+        // console.log(` - Balance Difference: ${balanceDifference}`);
+
+        return balanceDifference;
+    } catch (error) {
+        logError(`Failed to get USDT transactions for address ${address} in block ${blockNumber}: ${error}`);
+        throw new Error('Failed to get USDT transactions');
+    }
+}
+
+// Функция для получения пополнений и выводов USDT по указанному блоку для указанного адреса
+async function getUSDTTransactionsByBlock(address, blockNumber) {
+
+    // console.log('Тип данных address:', typeof address);
+    // console.log('Тип данных blockNumber:', typeof blockNumber);
+    // console.log('Значение address:', address);
+    // console.log('Значение blockNumber:', blockNumber);
+
+    try {
+        const transactions = await getUSDTTransactions(address);
+        const filteredTransactions = transactions.filter(tx => tx.blockNumber === blockNumber);
+
+        const deposits = filteredTransactions.filter(tx => tx.to.toLowerCase() === address.toLowerCase());
+        const withdrawals = filteredTransactions.filter(tx => tx.from.toLowerCase() === address.toLowerCase());
+
+        const totalDeposits = deposits.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 6)), 0);
+        const totalWithdrawals = withdrawals.reduce((sum, tx) => sum + Number(formatBigInt(tx.value, 6)), 0);
+
+        const balanceDifference = totalDeposits - totalWithdrawals;
+
+        // console.log(` - Deposits for address ${address} in block ${blockNumber}:`, deposits);
+        // console.log(` - Withdrawals for address ${address} in block ${blockNumber}:`, withdrawals);
+        // console.log(` - Total Deposits: ${totalDeposits}, Total Withdrawals: ${totalWithdrawals}`);
+        // console.log(` - Balance Difference: ${balanceDifference}`);
+
+        return balanceDifference;
+    } catch (error) {
+        logError(`Failed to get USDT transactions for address ${address} in block ${blockNumber}: ${error}`);
+        throw new Error('Failed to get USDT transactions');
+    }
+}
+
+// Функция для перебора нескольких адресов Стратегий и вызова getUSDTTransactionsByBlock для каждого адреса
+async function getBalanceDifferencesForAddresses(addresses, blockNumber) {
+
+    if (!addresses || !Array.isArray(addresses)) {
+        logError(`addresses должен быть массивом.`);
+        throw new Error('addresses должен быть массивом.');
+    }
+    if (!blockNumber || typeof blockNumber !== 'string') {
+        logError(`blockNumber должен быть строкой.`);
+        throw new Error('blockNumber должен быть строкой.');
+    }
+
+    let totalBalanceDifference = 0;
+
+    for (const address of addresses) {
+        if (!address || typeof address !== 'string') {
+            logError(`address должен быть строкой.`);
+            throw new Error('address должен быть строкой.');
+        }
+        try {
+            const balanceDifference = await getUSDTTransactionsByBlock(address, blockNumber);
+            //console.log(` -  - Balance Difference: ${balanceDifference}`);
+            totalBalanceDifference += Number(balanceDifference);
+        } catch (error) {
+            logError(`Failed to get balance difference for address ${address} in block ${blockNumber}: ${error}`);
+        }
+    }
+
+    return totalBalanceDifference;
+}
+
+// Новый маршрут для получения пополнений и выводов USDT по указанному блоку
+app.get('/usdt/:address/:blockNumber', async (req, res) => {
+    const { address, blockNumber } = req.params;
+
+    try {
+        const result = await getUSDTTransactionsByBlock(address, blockNumber);
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Failed to get USDT transactions');
+    }
+});
+
+//
+//
+// Определение для Депозитов и Выводов ( статусы Optimized и Standard )
+//
+//
+
+// Функция для получения всех транзакций по указанному адресу и блоку
+async function getTransactionsByAddressAndBlock(address, blockNumber) {
+
+    const response = await retryEtherscan(async () => {
+        const apiKey = getNextEtherscanApiKey();
+        const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=${blockNumber}&endblock=${blockNumber}&sort=asc&apikey=${apiKey}`;
+        return await axios.get(url);
+    });
+
+    if (response.data.status === '1' && response.data.message === 'OK') {
+        return response.data.result;
+    } else {
+        console.warn(`No transactions found for address ${address} in block ${blockNumber}`);
+        return [];
+    }
+}
+
+// Функция для получения всех транзакций с участием одного адреса в указанном блоке
+async function showBlockTransactions(address, blockNumber) {
+    try {
+        // Получаем все транзакции для данного адреса и блока
+        const transactions = await getTransactionsByAddressAndBlock(address, blockNumber);
+
+        // Возвращаем 'Optimized', если есть транзакции, иначе 'Standard'
+        return transactions.length > 0 ? 'Optimized' : 'Standard';
+    } catch (error) {
+        logError(`Failed to get transactions for address ${address} in block ${blockNumber}: ${error}`);
+        throw new Error('Failed to get transactions');
+    }
+}
+
+// Обновленный маршрут для отображения всех транзакций в указанном блоке
+app.get('/ckeck_optimized/:blockNumber', async (req, res) => {
+    const address = '0xa68be02a2B7EbeCac84a6F33F2DDa63B05911b95';
+    const { blockNumber } = req.params;
+    logWarning(`blockNumber : ${blockNumber}`)
+    try {
+        const transactions = await showBlockTransactions(address, blockNumber);
+        console.log(`Transactions in block ${blockNumber}:`, transactions);
+        res.json(transactions);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Failed to get transactions for block');
+    }
+});
+
+//
+//
+// Чистый доход DSF
+//
+//
+
+// Новый маршрут для получения данных о доходах и стоимости транзакций
+app.get('/event-summary', async (req, res) => {
+    try {
+        // Получение всех событий "AutoCompoundAll" и вычисление TotalIncomeDSF и AutoCompoundAllCostUsd
+        const [autoCompoundAllEvents] = await pool.query(`
+            SELECT SUM(CAST(returnValues->'$.incomeDSF' AS DECIMAL(18, 8))) AS TotalIncomeDSF, SUM(transactionCostUsd) AS AutoCompoundAllCostUsd
+            FROM contract_events
+            WHERE event = 'AutoCompoundAll'
+        `);
+
+        // Получение всех событий "ClaimedAllManagementFee" и вычисление ClaimedAllManagementFeeCostUsd
+        const [claimedAllManagementFeeEvents] = await pool.query(`
+            SELECT SUM(transactionCostUsd) AS ClaimedAllManagementFeeCostUsd
+            FROM contract_events
+            WHERE event = 'ClaimedAllManagementFee'
+        `);
+
+        // Получение всех уникальных событий "Deposited" с "transaction_status": "Optimized" и вычисление DepositedCostUsd
+        const [depositedEvents] = await pool.query(`
+            SELECT SUM(transactionCostUsd) AS DepositedCostUsd
+            FROM (
+                SELECT DISTINCT blockNumber, transactionCostUsd
+                FROM contract_events
+                WHERE event = 'Deposited' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
+            ) AS uniqueDepositedEvents
+        `);
+
+        // Получение всех уникальных событий "Withdrawn" с "transaction_status": "Optimized" и вычисление WithdrawnCostUsd
+        const [withdrawnEvents] = await pool.query(`
+            SELECT SUM(transactionCostUsd) AS WithdrawnCostUsd
+            FROM (
+                SELECT DISTINCT blockNumber, transactionCostUsd
+                FROM contract_events
+                WHERE event = 'Withdrawn' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
+            ) AS uniqueWithdrawnEvents
+        `);
+
+        const totalIncomeDSF = autoCompoundAllEvents[0].TotalIncomeDSF || 0;
+        const autoCompoundAllCostUsd = autoCompoundAllEvents[0].AutoCompoundAllCostUsd || 0;
+        const claimedAllManagementFeeCostUsd = claimedAllManagementFeeEvents[0].ClaimedAllManagementFeeCostUsd || 0;
+        const depositedCostUsd = depositedEvents[0].DepositedCostUsd || 0;
+        const withdrawnCostUsd = withdrawnEvents[0].WithdrawnCostUsd || 0;
+
+        const netIncome = totalIncomeDSF - autoCompoundAllCostUsd - claimedAllManagementFeeCostUsd - depositedCostUsd - withdrawnCostUsd;
+
+        const summary = {
+            TotalIncomeDSF: totalIncomeDSF,
+            AutoCompoundAllCostUsd: autoCompoundAllCostUsd,
+            ClaimedAllManagementFeeCostUsd: claimedAllManagementFeeCostUsd,
+            DepositedCostUsd: depositedCostUsd,
+            WithdrawnCostUsd: withdrawnCostUsd,
+            NetIncome: netIncome
+        };
+
+        res.json(summary);
+    } catch (error) {
+        console.error('Failed to fetch event summary:', error);
+        res.status(500).send('Failed to fetch event summary');
+    }
+});
+
+// Новый маршрут для получения сводной информации о событиях по каждому месяцу
+app.get('/monthly-event-summary', async (req, res) => {
+    try {
+        // Получение сводной информации по каждому месяцу
+        const [monthlySummary] = await pool.query(`
+            SELECT 
+                DATE_FORMAT(eventDate, '%Y-%m') AS month,
+                SUM(CAST(returnValues->'$.incomeDSF' AS DECIMAL(18, 8))) AS TotalIncomeDSF,
+                SUM(CASE WHEN event = 'AutoCompoundAll' THEN transactionCostUsd ELSE 0 END) AS AutoCompoundAllCostUsd,
+                SUM(CASE WHEN event = 'ClaimedAllManagementFee' THEN transactionCostUsd ELSE 0 END) AS ClaimedAllManagementFeeCostUsd,
+                SUM(CASE 
+                    WHEN event = 'Deposited' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized' 
+                    THEN transactionCostUsd 
+                    ELSE 0 
+                END) AS DepositedCostUsd,
+                SUM(CASE 
+                    WHEN event = 'Withdrawn' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized' 
+                    THEN transactionCostUsd 
+                    ELSE 0 
+                END) AS WithdrawnCostUsd
+            FROM contract_events
+            GROUP BY month
+            ORDER BY month ASC
+        `);
+
+        // Вычисление чистого дохода для каждого месяца
+        const summaryWithNetIncome = monthlySummary.map(monthly => {
+            const netIncome = (monthly.TotalIncomeDSF || 0) - (monthly.AutoCompoundAllCostUsd || 0) - (monthly.ClaimedAllManagementFeeCostUsd || 0) - (monthly.DepositedCostUsd || 0) - (monthly.WithdrawnCostUsd || 0);
+            return {
+                ...monthly,
+                NetIncome: netIncome
+            };
+        });
+
+        res.json(summaryWithNetIncome);
+    } catch (error) {
+        console.error('Failed to fetch monthly event summary:', error);
+        res.status(500).send('Failed to fetch monthly event summary');
+    }
+});
+
+//
+//
+// DSF доходы с каждого кошелька 
+//
+//
+
+// Сбор данных из unique_depositors и таблицы событий
+async function fetchUniqueDepositors() {
+    const query = `SELECT depositor_address FROM unique_depositors`;
+    const [rows] = await pool.query(query);
+    console.log(`Fetched ${rows.length} unique depositors`);
+    return rows.map(row => row.depositor_address);
+}
+
+// Сбор данных из contract_events и таблицы событий
+async function fetchAllEvents() {
+    const query = `SELECT * FROM contract_events WHERE event IN ('Deposited', 'Withdrawn', 'Transfer', 'AutoCompoundAll') ORDER BY blockNumber ASC`;
+    const [rows] = await pool.query(query);
+    console.log(`Fetched ${rows.length} events`);
+    return rows;
+}
+
+// Расчет доли дохода проекта DSF от каждого кошелька
+async function calculateIncomeDSF() {
+    const uniqueDepositors = await fetchUniqueDepositors();
+    const events = await fetchAllEvents();
+
+    let totalLpShares = 0.0; // Общее количество lpShares
+    const lpShares = new Map(); // Хранение lpShares для каждого кошелька
+    const incomeDSFMap = new Map(); // Хранение дохода для каждого кошелька
+
+    // Инициализация доходов всех кошельков нулями
+    for (const wallet of uniqueDepositors) {
+        incomeDSFMap.set(wallet, 0.0);
+    }
+
+    for (const event of events) {
+        try {
+            const returnValues = event.returnValues;
+
+            if (event.event === 'Deposited') {
+                const shares = parseFloat(returnValues.lpShares || 0);
+
+                totalLpShares += shares;
+                lpShares.set(returnValues.depositor, (lpShares.get(returnValues.depositor) || 0.0) + shares);
+                console.log(`Deposited: ${shares} shares to ${returnValues.depositor}, totalLpShares: ${totalLpShares}`);
+            } else if (event.event === 'Withdrawn') {
+                const shares = parseFloat(returnValues.lpShares || 0);
+
+                totalLpShares -= shares;
+                lpShares.set(returnValues.withdrawer, (lpShares.get(returnValues.withdrawer) || 0.0) - shares);
+                console.log(`Withdrawn: ${shares} shares from ${returnValues.withdrawer}, totalLpShares: ${totalLpShares}`);
+            } else if (event.event === 'Transfer') {
+                const shares = parseFloat(returnValues.value || 0);
+
+                lpShares.set(returnValues.from, (lpShares.get(returnValues.from) || 0.0) - shares);
+                lpShares.set(returnValues.to, (lpShares.get(returnValues.to) || 0.0) + shares);
+                console.log(`Transfer: ${shares} shares from ${returnValues.from} to ${returnValues.to}`);
+            } else if (event.event === 'AutoCompoundAll') {
+                const incomeDSF = parseFloat(returnValues.incomeDSF || 0);
+                logWarning(`AutoCompoundAll: incomeDSF ${incomeDSF} at block ${event.blockNumber}`);
+
+                for (const wallet of uniqueDepositors) {
+                    const walletLpShares = lpShares.get(wallet) || 0.0;
+                    const walletIncomeBefore = incomeDSFMap.get(wallet) || 0.0;
+                    
+                    if (walletLpShares > 0.0) {
+                        const walletShare = walletLpShares / totalLpShares;
+                        const walletIncome = (incomeDSF * walletShare);
+
+                        // Суммируем текущий walletIncome с предыдущими
+                        incomeDSFMap.set(wallet, walletIncomeBefore + walletIncome);
+
+                        //incomeDSFMap.set(wallet, (incomeDSFMap.get(wallet) || 0.0) + walletIncome);
+                        console.log(`AutoCompoundAll: wallet ${wallet}, walletIncome ${walletIncome}, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
+                    } else {
+                        console.log(`AutoCompoundAll: wallet ${wallet}, walletIncome 0.0, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error(`Failed to process event ${event.id}: ${error.message}`);
+        }
+    }
+
+    logSuccess(`Complete calculate Income DSF`)
+    await storeAllIncomeDSF(incomeDSFMap);
+}
+
+// Обновление данных в таблице incomDSFfromEveryOne
+async function storeAllIncomeDSF(incomeDSFMap) {
+    const query = `
+        INSERT INTO incomDSFfromEveryOne (wallet_address, incomeDSF)
+        VALUES ?
+        ON DUPLICATE KEY UPDATE incomeDSF = VALUES(incomeDSF)
+    `;
+    const values = Array.from(incomeDSFMap.entries()).map(([wallet, income]) => [wallet, income.toString()]);
+    
+    try {
+        const result = await pool.query(query, [values]);
+        console.log(`Stored all incomeDSF with result: ${JSON.stringify(result)}`);
+    } catch (error) {
+        console.error(`Failed to store all incomeDSF: ${error.message}`);
+    }
+}
+
+// Эндпоинт для получения всех данных доходов DSF с каждого кошелька 
+app.get('/api/incomDSFfromEveryOne', async (req, res) => {
+    try {
+        const query = `SELECT * FROM incomDSFfromEveryOne`;
+        const [rows] = await pool.query(query);
+        console.log(`Fetched incomDSFfromEveryOne data: ${JSON.stringify(rows)}`);
+        res.json(rows);
+    } catch (error) {
+        console.error(`Failed to fetch incomDSFfromEveryOne data: ${error.message}`);
+        res.status(500).send('Failed to fetch data');
+    }
+});
+
+// Эндпоинт для получения данных доходов DSF с конкретного кошелька 
+app.get('/api/incomDSFfromEveryOne/:wallet', async (req, res) => {
+    const { wallet } = req.params;
+    try {
+        const query = `SELECT * FROM incomDSFfromEveryOne WHERE wallet_address = ?`;
+        const [rows] = await pool.query(query, [wallet]);
+        console.log(`Fetched incomDSFfromEveryOne data for wallet ${wallet}: ${JSON.stringify(rows)}`);
+        res.json(rows[0] || {});
+    } catch (error) {
+        console.error(`Failed to fetch incomDSFfromEveryOne data for wallet ${wallet}: ${error.message}`);
+        res.status(500).send('Failed to fetch data');
+    }
+});
+
+
+// Эндпоинт для получения суммы incomeDSF
+app.get('/api/incomDSFfromEveryOne/total', async (req, res) => {
+    try {
+        const query = `SELECT SUM(incomeDSF) as totalIncomeDSF FROM incomDSFfromEveryOne`;
+        const [rows] = await pool.query(query);
+        const totalIncomeDSF = rows[0].totalIncomeDSF || 0;
+        console.log(`Fetched total incomeDSF: ${totalIncomeDSF}`);
+        res.json({ totalIncomeDSF });
+    } catch (error) {
+        console.error(`Failed to fetch total incomeDSF: ${error.message}`);
+        res.status(500).send('Failed to fetch data');
+    }
+});
+
 
 //
 //
 //
 //
 //
+
 
 // Последовательный запуск всех функций при запуске сервера
 // NEW Apy + Wallets
 const updateAllData = async () => {
     try {
+
+        initializationCompleted = false;
+
+        await checkAllApiKeys();
+
         // Проверка на упущенные Events
         await initializeMissingEvents().catch(console.error);
-        
+
         // Инициализация таблицы и заполнение уникальными депозиторами
         await populateUniqueDepositors();
 
@@ -2991,7 +3859,14 @@ const updateAllData = async () => {
         //await calculatePersonalYieldRate();
         
         await updateAllWallets();
-        logSuccess("Wallets updated successfully.");
+        //logSuccess("Wallets updated successfully.");
+
+        // Расчет доходов DSF с каждого кошелька
+        await calculateIncomeDSF();
+
+        initializationTelegramBotEvents = true;
+        initializationCompleted = true;
+        console.log(`checkForNewEvents : activated (${initializationCompleted})`);
 
     } catch (error) {
         logError(`Failed to update all data: ${error}`);
@@ -3013,8 +3888,9 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    ///setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
-server.keepAliveTimeout = 65000; // 65 секунд
+server.keepAliveTimeout = 120000; // 120 секунд
+server.headersTimeout = 121000; // 121 секунда
