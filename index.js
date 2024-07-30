@@ -3002,7 +3002,7 @@ app.get('/events/:wallet', async (req, res) => {
 //
 //
 
-// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events, из событий 'Deposited' и 'Transfer'
+// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events, из событий 'Deposited', CreatedPendingDeposit и 'Transfer'
 async function extractUniqueDepositors() {
     let connection;
     try {
@@ -3015,6 +3015,10 @@ async function extractUniqueDepositors() {
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) AS depositor
             FROM contract_events
             WHERE event = 'Transfer'
+            UNION
+            SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) AS depositor
+            FROM contract_events
+            WHERE event = 'CreatedPendingDeposit'
         `);
         return rows.map(row => row.depositor);
     } catch (error) {
