@@ -559,7 +559,7 @@ async function checkAllApiKeys() {
 }
 
 // Функция для повторного выполнения запроса с экспоненциальной задержкой
-const retry = async (fn, retries = 5, delay = 500) => {
+const retry = async (fn, retries = 3, delay = 200) => {
     try {
         return await fn();
     } catch (error) {
@@ -576,7 +576,7 @@ const retry = async (fn, retries = 5, delay = 500) => {
 };
 
 // Функция для повторного выполнения запроса с экспоненциальной задержкой
-const retryEtherscan = async (fn, retries = 5, delay = 1500) => {
+const retryEtherscan = async (fn, retries = 5, delay = 200) => {
     try {
         return await fn();
     } catch (error) {
