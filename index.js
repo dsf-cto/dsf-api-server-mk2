@@ -3857,7 +3857,8 @@ const updateAllData = async () => {
 
         // Расчет персональных APY
         //await calculatePersonalYieldRate();
-        
+
+        // Обновление данныхкошельков
         await updateAllWallets();
         //logSuccess("Wallets updated successfully.");
 
@@ -3888,7 +3889,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    ///setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
