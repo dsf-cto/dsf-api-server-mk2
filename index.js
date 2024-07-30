@@ -1430,10 +1430,10 @@ async function calculateSavingsAndSpending(wallet) {
 async function calculateTotalSavingsAndSpending() {
     const query = `
         SELECT 
-            SUM(JSON_EXTRACT(wallet_info, '$.eth_spent')) AS totalEthSpent,
-            SUM(JSON_EXTRACT(wallet_info, '$.usd_spent')) AS totalUsdSpent,
-            SUM(JSON_EXTRACT(wallet_info, '$.eth_saved')) AS totalEthSaved,
-            SUM(JSON_EXTRACT(wallet_info, '$.usd_saved')) AS totalUsdSaved
+            SUM(eth_spent) AS totalEthSpent,
+            SUM(usd_spent) AS totalUsdSpent,
+            SUM(eth_saved) AS totalEthSaved,
+            SUM(usd_saved) AS totalUsdSaved
         FROM wallet_info
     `;
 
@@ -1460,6 +1460,7 @@ async function calculateTotalSavingsAndSpending() {
         if (connection) connection.release();
     }
 }
+
 
 // Для getWalletDataOptim
 async function updateWalletData(walletAddress, cachedData) {
