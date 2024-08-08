@@ -1,4 +1,4 @@
-// DSF.Finance API Server Mk6 
+// DSF.Finance API Server Mk6.1
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
