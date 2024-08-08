@@ -3919,11 +3919,9 @@ app.get('/request/incomDSFfromEveryOne', checkApiKey, async (req, res) => {
 });
 
 // Эндпоинт для получения всех данных для конкретного кошелька
-// https://api2.dsf.finance/request/wallet?wallet=0xYourWalletAddress&apikey=your_valid_api_key_here
-app.get('/request/wallet', checkApiKey, async (req, res) => {
-    try {    
-        connectToWeb3Provider();
-
+// https://api2.dsf.finance/request/walletinfo?wallet=0xYourWalletAddress&apikey=your_valid_api_key_here
+app.get('/request/walletinfo', checkApiKey, async (req, res) => {
+    try {
         const { wallet } = req.query;
         if (!wallet) {
             return res.status(400).json({ error: 'Missing wallet parameter' });
@@ -3935,97 +3933,34 @@ app.get('/request/wallet', checkApiKey, async (req, res) => {
         // Если адрес некорректный, возвращаем значения по умолчанию
         if (!walletAddress) {
             logError('Invalid wallet address:', walletAddress_);
-            return res.json(getDefaultWalletData(0, 0, 0, 0));
+            return res.status(400).json({ error: 'Invalid wallet address' });
         }
-        
+
         console.log(`\nWallet Address          :`, walletAddress);
 
         if (!/^(0x)?[0-9a-f]{40}$/i.test(walletAddress)) {
             logError(`Адрес не соответствует ожидаемому формату.`);
+            return res.status(400).json({ error: 'Invalid wallet address format' });
         } else {
             logSuccess(`Адрес соответствует ожидаемому формату.`);
         }
-        
+
         let connection;
         try {
             connection = await pool.getConnection();
 
-            dsfLpBalance = retry(() => contractDSF.methods.balanceOf(walletAddress).call()).catch(() => 0);
-
-            // Проверяем наличие кошелька в базе данных unique_depositors
-            const [rows] = await connection.query('SELECT * FROM unique_depositors WHERE depositor_address = ?', [walletAddress]);
-            
-            if (rows.length === 0 && dsfLpBalance === 0) {
-                // Если кошелек не найден в unique_depositors и dsfLpBalance равно нулю, возвращаем пустые данные
-                logWarning('Wallet not found in unique_depositors_test.');
-                return res.json(getDefaultWalletData(0, 0, 0, 0));
-            }
-
-            // Проверяем наличие кошелька в базе данных wallet_info_test
-            const [walletRows] = await connection.query('SELECT * FROM wallet_info_test WHERE wallet_address = ?', [walletAddress]);
+            // Проверяем наличие кошелька в базе данных wallet_info
+            const [walletRows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
+            console.log(`Wallet info for ${walletAddress}: ${walletRows.length}`);
 
             if (walletRows.length === 0) {
-                // Если кошелек не найден в wallet_info_test, получаем данные и сохраняем их
-                console.log(`Получаем данные кошелька`);
-                try {
-                    const walletData = await getWalletData(walletAddress);
-                    
-                    // Проверяем значения dsfLpBalance и safeRatioUser
-                    if (walletData.dsfLpBalance > 0 || walletData.safeRatioUser > 0) {
-                        const insertQuery = `
-                            INSERT INTO wallet_info_test (
-                                wallet_address,
-                                user_deposits,
-                                dsf_lp_balance,
-                                ratio_user,
-                                available_to_withdraw,
-                                cvx_share,
-                                cvx_cost,
-                                crv_share,
-                                crv_cost,
-                                annual_yield_rate,
-                                eth_spent,
-                                usd_spent,
-                                eth_saved,
-                                usd_saved,
-                                updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                        `;
-                        await connection.query(insertQuery, [
-                            walletAddress,
-                            walletData.userDeposits,
-                            walletData.dsfLpBalance,
-                            walletData.safeRatioUser,
-                            walletData.availableToWithdraw,
-                            walletData.cvxShare,
-                            walletData.cvxCost,
-                            walletData.crvShare,
-                            walletData.crvCost,
-                            walletData.annualYieldRate,
-                            walletData.ethSpent,
-                            walletData.usdSpent,
-                            walletData.ethSaved,
-                            walletData.usdSaved
-                        ]);
-                        // Отправляем полученные данные клиенту
-                        res.json(serializeBigints(walletData)); // Сериализация и Отправка сериализованных данных
-                    } else {
-                        logWarning(`Wallet balance or ratio is zero, not saving to DB.`);
-                        res.json(walletData); // Возвращаем данные без сохранения
-                    }
-                } catch (error) {
-                    // Логируем ошибку и отправляем ответ сервера
-                    logError(`Failed to retrieve or insert wallet data : ${error}`);
-                    res.status(500).send('Internal Server Error');
-                }
+                // Если кошелек не найден в wallet_info, возвращаем ошибку
+                logWarning(`Wallet ${walletAddress} not found in wallet_info.`);
+                return res.status(404).json({ error: 'Wallet not found' });
             } else {
                 // Если данные уже есть, возвращаем их
                 console.log(`Данные кошелька уже есть`);
                 res.json(walletRows[0]);
-
-                // решить
-                // добавить запрос на обновление кошелька
-
             }
         } catch (error) {
             // Обработка ошибок при соединении или выполнении SQL-запроса
@@ -4040,7 +3975,6 @@ app.get('/request/wallet', checkApiKey, async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
-
 
 //
 //
