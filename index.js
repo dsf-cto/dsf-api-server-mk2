@@ -44,7 +44,10 @@ const app = express();
 // Параметр `trust proxy` в true
 //app.set('trust proxy', true);
 //app.set('trust proxy', 1);
-app.set('trust proxy', false);
+//app.set('trust proxy', false);
+
+app.set('trust proxy', 1); // 1 означает доверять первому proxy, если за ним стоит несколько proxy, можно использовать 'trust proxy', 'loopback' или 'loopback, linklocal, uniquelocal'
+
 
 
 // Ограничение частоты запросов
