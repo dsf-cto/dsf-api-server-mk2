@@ -2672,7 +2672,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Функция для обработки событий
 async function processEvent(event, isNewEvents) {
 
-    await delay(200); // Задержка 200 миллисекунд
+    await delay(400); // Задержка 400 миллисекунд
 
     const block = await web3.eth.getBlock(event.blockNumber);
     const eventDate = new Date(Number(block.timestamp) * 1000);
@@ -4052,7 +4052,8 @@ const updateAllData = async () => {
 
         // Проверка на упущенные Events
         await initializeMissingEvents().catch(console.error);
-
+        await delay(40000); // Задержка 40 секунда
+        
         // Инициализация таблицы и заполнение уникальными депозиторами
         await populateUniqueDepositors();
 
