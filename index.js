@@ -157,7 +157,7 @@ testConnection();
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-For RESTART DataBase contract_events: 
+// For RESTART DataBase contract_events: 
 const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
         await pool.query(dropTableQuery);
         console.log(`Таблица успешно удалена`);
