@@ -2666,8 +2666,14 @@ async function storeEvents(events, isNewEvents = false) {
     await Promise.all(transferEvents.map(event => limit(() => processEvent(event, isNewEvents))));
 }
 
+// Функция для добавления задержки
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Функция для обработки событий
 async function processEvent(event, isNewEvents) {
+
+    await delay(200); // Задержка 200 миллисекунд
+
     const block = await web3.eth.getBlock(event.blockNumber);
     const eventDate = new Date(Number(block.timestamp) * 1000);
     const transaction = await web3.eth.getTransaction(event.transactionHash);
