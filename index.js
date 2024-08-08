@@ -3919,12 +3919,17 @@ app.get('/request/incomDSFfromEveryOne', checkApiKey, async (req, res) => {
 });
 
 // Эндпоинт для получения всех данных для конкретного кошелька
-// https://api2.dsf.finance/request/wallet?walletAddress=0xYourWalletAddress&apikey=your_valid_api_key_here
+// https://api2.dsf.finance/request/wallet?wallet=0xYourWalletAddress&apikey=your_valid_api_key_here
 app.get('/request/wallet', checkApiKey, async (req, res) => {
     try {    
         connectToWeb3Provider();
 
-        const walletAddress_ = req.query.walletAddress.toLowerCase();
+        const { wallet } = req.query;
+        if (!wallet) {
+            return res.status(400).json({ error: 'Missing wallet parameter' });
+        }
+
+        const walletAddress_ = wallet.toLowerCase();
         const walletAddress = normalizeAddress(walletAddress_);
 
         // Если адрес некорректный, возвращаем значения по умолчанию
