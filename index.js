@@ -1953,6 +1953,7 @@ app.get('/wallet/:walletAddress', async (req, res) => {
 cron.schedule('0 */3 * * *', async () => {
     logInfo('UpdateAllWallets - Running a task every 3 hours');
     try {
+        await populateUniqueDepositors();
         await updateAllWallets(); // Вызов функции обновления всех кошельков
         //logInfo('All wallets updated successfully.');
     } catch (error) {
