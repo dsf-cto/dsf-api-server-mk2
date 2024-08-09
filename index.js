@@ -158,9 +158,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events_test: 
-const dropTableQuery = `DROP TABLE IF EXISTS contract_events_test;`;
-        await pool.query(dropTableQuery);
-        console.log(`Таблица успешно удалена`);
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events_test;`;
+//         await pool.query(dropTableQuery);
+//         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate_test: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate_test;`;
@@ -3966,7 +3966,7 @@ app.get('/request/walletinfo', checkApiKey, async (req, res) => {
             if (walletRows.length === 0) {
                 // Если кошелек не найден в wallet_info, возвращаем ошибку
                 logWarning(`Wallet ${walletAddress} not found in wallet_info.`);
-                return res.status(404).json({ error: 'Wallet not found' });
+                return res.json(getDefaultWalletData(0, 0, 0, 0));
             } else {
                 // Если данные уже есть, возвращаем их
                 console.log(`Данные кошелька уже есть`);
