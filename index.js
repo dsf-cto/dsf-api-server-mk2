@@ -3943,7 +3943,7 @@ app.get('/request/walletinfo', checkApiKey, async (req, res) => {
         // Если адрес некорректный, возвращаем значения по умолчанию
         if (!walletAddress) {
             logError('Invalid wallet address:', walletAddress_);
-            return res.status(400).json({ error: 'Invalid wallet address' });
+            return res.json(getDefaultWalletData(0, 0, 0, 0));
         }
 
         console.log(`\nWallet Address          :`, walletAddress);
