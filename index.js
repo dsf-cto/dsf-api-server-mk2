@@ -158,9 +158,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
-// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-//         await pool.query(dropTableQuery);
-//         console.log(`Таблица успешно удалена`);
+const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
+        await pool.query(dropTableQuery);
+        console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
@@ -2911,10 +2911,10 @@ async function processEvent(event, isNewEvents) {
     
                 // Преобразование blockNumber в строку, если это число
                 const balanceDifference = await getBalanceDifferencesForAddresses(addressesStrategy, blockNumberStr);
+                await delay(1000); // Задержка пол секунды
                 formattedEvent.returnValues = {
                     incomeDSF: Number(balanceDifference)
                 };
-                await delay(500); // Задержка пол секунды
 
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'AutoCompoundAll' detected!
@@ -2979,7 +2979,7 @@ async function processEvent(event, isNewEvents) {
             }
             break;
     }
-
+    await delay(200); // Задержка пол секунды
     // Проверяем, есть ли событие уже в базе данных
     const [existingEvent] = await pool.query(
         `SELECT COUNT(*) as count 
