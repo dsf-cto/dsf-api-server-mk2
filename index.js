@@ -159,9 +159,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase wallet_info: 
-// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
-//         await pool.query(dropTableQuery);
-//         console.log(`Таблица успешно удалена`);
+const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
+        await pool.query(dropTableQuery);
+        console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
 // const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
