@@ -1,4 +1,4 @@
-// DSF.Finance API Server Mk6.2
+// DSF.Finance API Server Mk6.5
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
@@ -18,11 +18,17 @@ import { performance } from 'perf_hooks'; // Для измерения врем�
 
 const ethPriceCache = new NodeCache({ stdTTL: 3600 }); // Кеш с временем жизни 1 час (3600 секунд)
 const userDepositsCache = new NodeCache({ stdTTL: 86400 }); // Кэш с TTL 86400 секунд (24 часа)
+const apyCache = new NodeCache({ stdTTL: 10800 }); // 10800  секунд = 3 часа
+
 
 // Параметры конфигурации для pLimit
 const MAX_CONCURRENT_REQUESTS = 5; // Максимальное количество одновременных запросов
 const REQUEST_DELAY_MS = 100; // Задержка между запросами в миллисекундах
 const RETRY_DELAY_MS = 3000; // Задержка перед повторной попыткой в миллисекундах
+
+// Флаги 
+let initializationCompleted = false; // Изначально инициализация не завершена
+let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
 
 dotenv.config();
 
@@ -43,7 +49,7 @@ const app = express();
 
 // Параметр `trust proxy` в true
 //app.set('trust proxy', true);
-//app.set('trust proxy', false); // для локального сервера
+// app.set('trust proxy', false); // для локального сервера
 app.set('trust proxy', 1); // для продакшн 1 означает доверять первому proxy, если за ним стоит несколько proxy, можно использовать 'trust proxy', 'loopback' или 'loopback, linklocal, uniquelocal'
 
 
@@ -137,8 +143,8 @@ async function testConnection() {
 
 testConnection();
 
-// For RESTART DataBase apy_info:  
-// const dropTableQuery = `DROP TABLE IF EXISTS apy_info;`;
+// For RESTART DataBase apy_info_test:  
+// const dropTableQuery = `DROP TABLE IF EXISTS apy_info_test;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
@@ -152,18 +158,18 @@ testConnection();
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase wallet_info: 
-// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
+// For RESTART DataBase wallet_info_test: 
+// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info_test;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase contract_events: 
-const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-        await pool.query(dropTableQuery);
-        console.log(`Таблица успешно удалена`);
+// For RESTART DataBase contract_events_test: 
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events_test;`;
+//         await pool.query(dropTableQuery);
+//         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase personal_yield_rate: 
-// const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
+// For RESTART DataBase personal_yield_rate_test: 
+// const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate_test;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
@@ -178,9 +184,9 @@ const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
 //
 //
 
-// Таблица wallet_info
+// Таблица wallet_info_test
 const createWalletTableQuery = `
-    CREATE TABLE IF NOT EXISTS wallet_info (
+    CREATE TABLE IF NOT EXISTS wallet_info_test (
         id INT AUTO_INCREMENT PRIMARY KEY,
         wallet_address VARCHAR(255) NOT NULL UNIQUE,
         user_deposits DECIMAL(36, 2) NOT NULL,
@@ -192,6 +198,7 @@ const createWalletTableQuery = `
         crv_share DECIMAL(36, 18) NOT NULL,
         crv_cost DECIMAL(36, 6) NOT NULL,
         annual_yield_rate DECIMAL(36, 6) NOT NULL,
+        apy_today DECIMAL(36, 6) NOT NULL,
         eth_spent DECIMAL(36, 18) NOT NULL,
         usd_spent DECIMAL(36, 2) NOT NULL,
         eth_saved DECIMAL(36, 18) NOT NULL,
@@ -199,14 +206,15 @@ const createWalletTableQuery = `
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
 `;
+
 async function initializeDatabaseWallet() {
     let connection;
     try {
         connection = await pool.getConnection();
         await connection.query(createWalletTableQuery);
-        logSuccess(`\nTable 'wallet_info' checked/created successfully.\n`);
+        logSuccess(`\nTable 'wallet_info_test' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'wallet_info' table : ${error}\n`);
+        logError(`\nFailed to create 'wallet_info_test' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -216,7 +224,7 @@ initializeDatabaseWallet();
 
 // Таблица для хранениния номера последнего проверенного блока
 const createSettingsTableQuery = `
-    CREATE TABLE IF NOT EXISTS settings (
+    CREATE TABLE IF NOT EXISTS settings_test (
         id INT AUTO_INCREMENT PRIMARY KEY,
         setting_key VARCHAR(255) NOT NULL UNIQUE,
         value VARCHAR(255) NOT NULL
@@ -228,9 +236,9 @@ async function initializeDatabaseSettings() {
     try {
         connection = await pool.getConnection();
         await connection.query(createSettingsTableQuery);
-        logSuccess(`\nTable 'settings' checked/created successfully.\n`);
+        logSuccess(`\nTable 'settings_test' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'settings' table : ${error}\n`);
+        logError(`\nFailed to create 'settings_test' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -239,9 +247,9 @@ async function initializeDatabaseSettings() {
 initializeDatabaseSettings();
 
 //NEW
-// Таблица apy_info
+// Таблица apy_info_test
 const createApyTableQuery = `
-    CREATE TABLE IF NOT EXISTS apy_info (
+    CREATE TABLE IF NOT EXISTS apy_info_test (
         id INT AUTO_INCREMENT PRIMARY KEY,
         timestamp DATETIME NOT NULL UNIQUE,
         apy DECIMAL(10, 4) NOT NULL,
@@ -255,9 +263,9 @@ async function initializeDatabaseApy() {
     try {
         connection = await pool.getConnection();
         await connection.query(createApyTableQuery);
-        logSuccess(`\nTable 'apy_info' checked/created successfully.\n`);
+        logSuccess(`\nTable 'apy_info_test' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'apy_info' table : ${error}\n`);
+        logError(`\nFailed to create 'apy_info_test' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -323,9 +331,9 @@ async function initializeUniqueDepositorsTable() {
 initializeUniqueDepositorsTable();
 
 //NEW 
-// Таблица contract_events 
+// Таблица contract_events_test 
 const createAllContractEventsTableQuery = `
-    CREATE TABLE IF NOT EXISTS contract_events (
+    CREATE TABLE IF NOT EXISTS contract_events_test (
         id INT AUTO_INCREMENT PRIMARY KEY,
         event VARCHAR(255),
         eventDate TIMESTAMP,
@@ -344,9 +352,9 @@ async function initializeAllContractEventsTable() {
     try {
         connection = await pool.getConnection();
         await connection.query(createAllContractEventsTableQuery);
-        logSuccess(`\nTable 'contract_events' checked/created successfully.\n`);
+        logSuccess(`\nTable 'contract_events_test' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'contract_events' table : ${error}\n`);
+        logError(`\nFailed to create 'contract_events_test' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -411,9 +419,9 @@ async function initializeDatabaseIncomDSF() {
 
 initializeDatabaseIncomDSF();
 
-// Таблица personal_yield_rate для хранения персональной ставки доходности
+// Таблица personal_yield_rate_test для хранения персональной ставки доходности
 const createPersonalYieldRateTableQuery = `
-    CREATE TABLE IF NOT EXISTS personal_yield_rate (
+    CREATE TABLE IF NOT EXISTS personal_yield_rate_test (
         id INT AUTO_INCREMENT PRIMARY KEY,
         depositor_address VARCHAR(255) NOT NULL,
         date DATE NOT NULL,
@@ -430,9 +438,9 @@ async function initializePersonalYieldRateTable() {
     try {
         connection = await pool.getConnection();
         await connection.query(createPersonalYieldRateTableQuery);
-        logSuccess(`\nTable 'personal_yield_rate' checked/created successfully.\n`);
+        logSuccess(`\nTable 'personal_yield_rate_test' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'personal_yield_rate' table : ${error}\n`);
+        logError(`\nFailed to create 'personal_yield_rate_test' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -725,6 +733,8 @@ async function getWalletData(walletAddress_) {
         totalEthSaved: ethSaved,
         totalUsdSaved: usdSaved
     } = await calculateSavingsAndSpending(walletAddress_);
+    
+    const apyToday = await getApyToday().catch(() => 0);
 
     let ratioUser;
     try {
@@ -737,8 +747,8 @@ async function getWalletData(walletAddress_) {
 
     // Если ratioUser равно 0, возвращаем значения по умолчанию и логируем предупреждения
     if (ratioUser === 0) {
-        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved);
-        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved);
+        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved, apyToday);
+        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved, apyToday);
     }
 
     
@@ -777,6 +787,7 @@ async function getWalletData(walletAddress_) {
             crvShare: Number(crvShare) / 1e18,
             crvCost,
             annualYieldRate,
+            apyToday,
             ethSpent,
             usdSpent,
             ethSaved,
@@ -788,13 +799,13 @@ async function getWalletData(walletAddress_) {
         return response;
     } catch (error) {
         logError(`Error retrieving data for wallet: ${walletAddress}, ${error}`);
-        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved);
-        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved);
+        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved, apyToday);
+        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved, apyToday);
     }
 }
 
 // Выводит информацию если баланс 0 или если произошла ошибка
-function logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved) {
+function logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved, apyToday) {
     logWarning("userDeposits       USDT : 0");
     logWarning("dsfLpBalance     DSF LP : 0");
     logWarning("ratioUser             % : 0");
@@ -804,6 +815,7 @@ function logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved) {
     logWarning("crvShare            CRV : 0");
     logWarning("crvCost            USDT : 0");
     logWarning("annualYieldRate       % : 0");
+    logWarning(`apyToday              % : ${apyToday}`);
     logWarning(`ethSpent            ETH : ${ethSpent}`);
     logWarning(`usdSpent              $ : ${usdSpent}`);
     logWarning(`ethSaved            ETH : ${ethSaved}`);
@@ -811,7 +823,7 @@ function logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved) {
 }
 
 // Возвращает значения по умолчанию, если произошла ошибка
-function getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved) {
+function getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved, apyToday) {
     return {
         userDeposits: 0,
         dsfLpBalance: 0,
@@ -822,6 +834,7 @@ function getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved) {
         crvShare: 0,
         crvCost: 0,
         annualYieldRate: 0,
+        apyToday,
         ethSpent,
         usdSpent,
         ethSaved,
@@ -865,10 +878,41 @@ function logWalletData(data) {
     console.log(`crvShare            CRV : ${data.crvShare}`);
     console.log(`crvCost            USDT : ${data.crvCost}`);
     console.log(`annualYieldRate       % : ${data.annualYieldRate}`);
+    console.log(`apyToday              % : ${data.apyToday}`);
     console.log(`ethSpent            ETH : ${data.ethSpent}`);
     console.log(`usdSpent              $ : ${data.usdSpent}`);
     console.log(`ethSaved            ETH : ${data.ethSaved}`);
     console.log(`usdSaved              $ : ${data.usdSaved}`);
+}
+
+// Функция для получения последнего значения APY и умножения его на 0.85
+async function getApyToday() {
+    try {
+        // Проверка кэша перед запросом
+        let cachedApy = apyCache.get('apyToday');
+        if (cachedApy) {
+            console.log('APY retrieved from cache');
+            return cachedApy;
+        }
+
+        const response = await axios.get('https://yields.llama.fi/chart/8a20c472-142c-4442-b724-40f2183c073e');
+        const data = response.data.data;
+
+        if (data.length === 0) {
+            throw new Error('No APY data available');
+        }
+
+        const latestApy = data[data.length - 1].apy;
+        const apyToday = latestApy * 0.85;
+
+        // Кэширование результата
+        apyCache.set('apyToday', apyToday);
+
+        return apyToday;
+    } catch (error) {
+        logError(`Error fetching APY data: ${error}`);
+        return 0; // Значение по умолчанию
+    }
 }
 
 async function getWalletDataOptim(walletAddress_, cachedData) {
@@ -899,8 +943,8 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
 
     // Если ratioUser равно 0, возвращаем значения по умолчанию и логируем предупреждения
     if (ratioUser === 0) {
-        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved);
-        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved);
+        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved, cachedData.apyToday);
+        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved, cachedData.apyToday);
     }
 
     try {
@@ -927,6 +971,7 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
             crvShare: Number(crvShare) / 1e18,
             crvCost,
             annualYieldRate,
+            apyToday: cachedData.apyToday,
             ethSpent,
             usdSpent,
             ethSaved,
@@ -945,8 +990,8 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
         console.log(`\nUpdate Wallet Address completed (${(endTime - startTime) / 1000} seconds)\n`);
 
         logError(`Error retrieving data for wallet: ${walletAddress}, ${error}`);
-        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved);
-        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved);
+        logWarningsForDefaultValues(ethSpent, usdSpent, ethSaved, usdSaved, cachedData.apyToday);
+        return getDefaultWalletData(ethSpent, usdSpent, ethSaved, usdSaved, cachedData.apyToday);
     }
 }
     
@@ -983,7 +1028,7 @@ async function calculateCurrentDeposit(walletAddress) {
 
         // Получаем все события для данного депозитора
         const [events] = await connection.query(
-            `SELECT * FROM contract_events 
+            `SELECT * FROM contract_events_test 
              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.from')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
@@ -1176,7 +1221,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
 
         // Получаем все события для данного депозитора
         const [events] = await connection.query(
-            `SELECT * FROM contract_events 
+            `SELECT * FROM contract_events_test 
              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.from')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
@@ -1358,7 +1403,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
 
         // Вставляем или обновляем запись для текущего депозитора и даты
         const insertQuery = `
-            INSERT INTO personal_yield_rate (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
+            INSERT INTO personal_yield_rate_test (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
             VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
             daily_income = VALUES(daily_income),
@@ -1386,7 +1431,7 @@ async function calculateSavingsAndSpending(wallet) {
     
     const spendingQuery = `
     SELECT SUM(transactionCostEth) AS totalEthSpent, SUM(transactionCostUsd) AS totalUsdSpent
-    FROM contract_events
+    FROM contract_events_test
     WHERE 
         (
             event IN ('CreatedPendingDeposit', 'CreatedPendingWithdrawal')
@@ -1399,7 +1444,7 @@ async function calculateSavingsAndSpending(wallet) {
 
     const savingsQuery = `
         SELECT SUM(transactionCostEth) AS totalEthOptimized, SUM(transactionCostUsd) AS totalUsdOptimized
-        FROM contract_events
+        FROM contract_events_test
         WHERE (event = 'Withdrawn' OR event = 'Deposited')
         AND JSON_EXTRACT(returnValues, '$.transaction_status') = 'Optimized'
         AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
@@ -1407,7 +1452,7 @@ async function calculateSavingsAndSpending(wallet) {
 
     const pendingCostsQuery = `
         SELECT SUM(transactionCostEth) AS totalEthPending, SUM(transactionCostUsd) AS totalUsdPending
-        FROM contract_events
+        FROM contract_events_test
         WHERE (event = 'CreatedPendingDeposit' OR event = 'CreatedPendingWithdrawal')
         AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
     `;
@@ -1466,7 +1511,7 @@ async function calculateTotalSavingsAndSpending() {
             SUM(usd_spent) AS totalUsdSpent,
             SUM(eth_saved) AS totalEthSaved,
             SUM(usd_saved) AS totalUsdSaved
-        FROM wallet_info
+        FROM wallet_info_test
     `;
 
     let connection;
@@ -1515,14 +1560,14 @@ async function updateWalletData(walletAddress, cachedData) {
         // Получение соединения с базой данных
         connection = await pool.getConnection();
 
-        // Проверяем наличие кошелька в таблице wallet_info
-        const [rows] = await connection.query('SELECT wallet_address FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
+        // Проверяем наличие кошелька в таблице wallet_info_test
+        const [rows] = await connection.query('SELECT wallet_address FROM wallet_info_test WHERE wallet_address = ?', [walletAddress]);
         console.log(`Existing wallet data from database : `, rows);
 
         if (rows.length === 0) {
             // Если кошелька нет в базе, вставляем новую запись
             const insertQuery = `
-                INSERT INTO wallet_info (
+                INSERT INTO wallet_info_test (
                     wallet_address,
                     user_deposits,
                     dsf_lp_balance,
@@ -1533,12 +1578,13 @@ async function updateWalletData(walletAddress, cachedData) {
                     crv_share,
                     crv_cost,
                     annual_yield_rate,
+                    apy_today,
                     eth_spent,
                     usd_spent,
                     eth_saved,
                     usd_saved,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 
             `;
 
@@ -1553,6 +1599,7 @@ async function updateWalletData(walletAddress, cachedData) {
                 walletData.crvShare,
                 walletData.crvCost,
                 walletData.annualYieldRate,
+                walletData.apyToday,
                 walletData.ethSpent,
                 walletData.usdSpent,
                 walletData.ethSaved,
@@ -1564,7 +1611,7 @@ async function updateWalletData(walletAddress, cachedData) {
         } else {
             // Запрос на обновление данных в базе данных
             const updateQuery = `
-                UPDATE wallet_info SET
+                UPDATE wallet_info_test SET
                 user_deposits = ?,
                 dsf_lp_balance = ?,
                 ratio_user = ?,
@@ -1574,6 +1621,7 @@ async function updateWalletData(walletAddress, cachedData) {
                 crv_share = ?,
                 crv_cost = ?,
                 annual_yield_rate = ?,
+                apy_today = ?,
                 eth_spent = ?,
                 usd_spent = ?,
                 eth_saved = ?,
@@ -1593,6 +1641,7 @@ async function updateWalletData(walletAddress, cachedData) {
                 walletData.crvShare,
                 walletData.crvCost,
                 walletData.annualYieldRate,
+                walletData.apyToday,
                 walletData.ethSpent,
                 walletData.usdSpent,
                 walletData.ethSaved,
@@ -1628,7 +1677,7 @@ async function updateWalletDataSingl(walletAddress) {
         
         // Запрос на обновление данных в базе данных
         const updateQuery = `
-            UPDATE wallet_info SET
+            UPDATE wallet_info_test SET
             user_deposits = ?,
             dsf_lp_balance = ?,
             ratio_user = ?,
@@ -1638,6 +1687,7 @@ async function updateWalletDataSingl(walletAddress) {
             crv_share = ?,
             crv_cost = ?,
             annual_yield_rate = ?,
+            apy_today = ?,
             eth_spent = ?,
             usd_spent = ?,
             eth_saved = ?,
@@ -1657,6 +1707,7 @@ async function updateWalletDataSingl(walletAddress) {
             walletData.crvShare,
             walletData.crvCost,
             walletData.annualYieldRate,
+            walletData.apyToday,
             walletData.ethSpent,
             walletData.usdSpent,
             walletData.ethSaved,
@@ -1725,6 +1776,8 @@ async function updateAllWallets() {
         const amountInCVX = (crvEarned * cvxRemainCliffs) / cvxTotalCliffs + cvx_balanceOf;
         const amountInCRV = crvEarned + crv_balanceOf;
 
+        const apyToday = await getApyToday().catch(() => 0);
+
         const cachedData = {
             crvEarned,
             cvxTotalCliffs,
@@ -1734,7 +1787,8 @@ async function updateAllWallets() {
             crv_balanceOf,
             cvxRemainCliffs,
             amountInCRV,
-            amountInCVX
+            amountInCVX,
+            apyToday
         };
 
         console.log(`\n${colors.yellow}${`Cached Data`}${colors.reset}\n`);
@@ -1794,7 +1848,7 @@ app.get('/wallets', async (req, res) => {
         connection = await pool.getConnection();
 
         // Получаем все кошельки из базы данных
-        const [rows] = await connection.query('SELECT * FROM wallet_info');
+        const [rows] = await connection.query('SELECT * FROM wallet_info_test');
 
         // Отправляем список кошельков клиенту в формате JSON
         res.json(rows);
@@ -1839,10 +1893,12 @@ app.get('/wallet/:walletAddress', async (req, res) => {
     const walletAddress_ = req.params.walletAddress.toLowerCase();
     const walletAddress = normalizeAddress(walletAddress_);
 
+    const apyToday = await getApyToday().catch(() => 0);
+
     // Если адрес некорректный, возвращаем значения по умолчанию
     if (!walletAddress) {
         logError('Invalid wallet address:', walletAddress_);
-        return res.json(getDefaultWalletData(0, 0, 0, 0));
+        return res.json(getDefaultWalletData(0, 0, 0, 0, apyToday));
     }
     
     console.log(`\nWallet Address          :`, walletAddress);
@@ -1865,16 +1921,16 @@ app.get('/wallet/:walletAddress', async (req, res) => {
         
         if (rows.length === 0 && dsfLpBalance === 0) {
             // Если кошелек не найден в unique_depositors и dsfLpBalance равно нулю, возвращаем пустые данные
-            logWarning('Wallet not found in unique_depositors.');
-            return res.json(getDefaultWalletData(0, 0, 0, 0));
+            logWarning('Wallet not found in unique_depositors_test.');
+            return res.json(getDefaultWalletData(0, 0, 0, 0, apyToday));
         }
 
-        // Проверяем наличие кошелька в базе данных wallet_info
-        const [walletRows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
-        console.log(`Rows from database wallet_info : ${walletRows}`);
+        // Проверяем наличие кошелька в базе данных wallet_info_test
+        const [walletRows] = await connection.query('SELECT * FROM wallet_info_test WHERE wallet_address = ?', [walletAddress]);
+        console.log(`Rows from database wallet_info_test : ${walletRows}`);
 
         if (walletRows.length === 0) {
-            // Если кошелек не найден в wallet_info, получаем данные и сохраняем их
+            // Если кошелек не найден в wallet_info_test, получаем данные и сохраняем их
             console.log(`Получаем данные кошелька`);
             try {
                 const walletData = await getWalletData(walletAddress);
@@ -1882,7 +1938,7 @@ app.get('/wallet/:walletAddress', async (req, res) => {
                 // Проверяем значения dsfLpBalance и safeRatioUser
                 if (walletData.dsfLpBalance > 0 || walletData.safeRatioUser > 0) {
                     const insertQuery = `
-                        INSERT INTO wallet_info (
+                        INSERT INTO wallet_info_test (
                             wallet_address,
                             user_deposits,
                             dsf_lp_balance,
@@ -1893,12 +1949,13 @@ app.get('/wallet/:walletAddress', async (req, res) => {
                             crv_share,
                             crv_cost,
                             annual_yield_rate,
+                            apy_today,
                             eth_spent,
                             usd_spent,
                             eth_saved,
                             usd_saved,
                             updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     `;
                     await connection.query(insertQuery, [
                         walletAddress,
@@ -1911,6 +1968,7 @@ app.get('/wallet/:walletAddress', async (req, res) => {
                         walletData.crvShare,
                         walletData.crvCost,
                         walletData.annualYieldRate,
+                        walletData.apyToday,
                         walletData.ethSpent,
                         walletData.usdSpent,
                         walletData.ethSaved,
@@ -2002,13 +2060,13 @@ async function upsertApyData(timestamp, apy) {
     let connection = await pool.getConnection();
 
     // Получаем все записи с такой же датой
-    const checkQuery = `SELECT timestamp FROM apy_info WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC`;
+    const checkQuery = `SELECT timestamp FROM apy_info_test WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC`;
     const [rows] = await connection.query(checkQuery, [timestamp]);
 
     if (rows.length === 0) {
         // Если записи с такой датой нет, добавляем новую запись
         const insertQuery = `
-            INSERT INTO apy_info (timestamp, apy)
+            INSERT INTO apy_info_test (timestamp, apy)
             VALUES (?, ?)
             ON DUPLICATE KEY UPDATE
             apy = VALUES(apy), updated_at = CURRENT_TIMESTAMP
@@ -2022,7 +2080,7 @@ async function upsertApyData(timestamp, apy) {
         if (latestTime > existingTime) {
             // Если новое время свежее, обновляем запись
             const updateQuery = `
-                UPDATE apy_info SET timestamp = ?, apy = ?, updated_at = CURRENT_TIMESTAMP
+                UPDATE apy_info_test SET timestamp = ?, apy = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE DATE(timestamp) = DATE(?)
             `;
             await connection.query(updateQuery, [timestamp, apy, timestamp]);
@@ -2094,7 +2152,7 @@ app.get('/apy', async (req, res) => {
         connection = await pool.getConnection();
 
         // Получаем все записи APY из базы данных в хронологическом порядке
-        const [rows] = await connection.query('SELECT timestamp AS date, apy FROM apy_info ORDER BY timestamp ASC');
+        const [rows] = await connection.query('SELECT timestamp AS date, apy FROM apy_info_test ORDER BY timestamp ASC');
 
         // Отправляем список записей APY клиенту в формате JSON
         res.json(rows);
@@ -2308,15 +2366,15 @@ async function initializeEthPriceData() {
     }
 }
 
-let initializationCompleted = false; // Изначально инициализация не завершена
-let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
+// let initializationCompleted = false; // Изначально инициализация не завершена
+// let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
 
 // Функция для начальной инициализации отсутствующих событий
 async function initializeMissingEvents() {
     try {
         console.log(`Initializing missing events...`);
 
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
 
@@ -2351,7 +2409,7 @@ async function missingCheckForEvents() {
         await delay(1000); // Задержка 1 секунда
         console.log(`Additional block check...`);
 
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
 
@@ -2380,7 +2438,7 @@ async function missingCheckForEvents() {
 async function updateLastCheckedBlock(blockNumber) {
     try {
         //console.log(`Updated last checked block to ${blockNumber}`);
-        const updateQuery = `INSERT INTO settings (setting_key, value) VALUES ('last_checked_block', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)`;
+        const updateQuery = `INSERT INTO settings_test (setting_key, value) VALUES ('last_checked_block', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)`;
         await pool.query(updateQuery, [blockNumber.toString()]);
     } catch (error) {
         logError(`Failed to update last checked block : ${error.message}`);
@@ -2389,7 +2447,7 @@ async function updateLastCheckedBlock(blockNumber) {
 //New2
 // Функция для получения последнего проверенного блока из базы данных
 async function getLastCheckedBlock() {
-    const selectQuery = `SELECT value FROM settings WHERE setting_key = 'last_checked_block'`;
+    const selectQuery = `SELECT value FROM settings_test WHERE setting_key = 'last_checked_block'`;
     const [rows] = await pool.query(selectQuery);
     return rows.length ? BigInt(rows[0].value) : BigInt(0);
 }
@@ -2408,7 +2466,7 @@ async function checkForNewEvents() {
         logWarning(`Checking for new events...`);
 
         // Получение номера последнего блока с событиями из базы данных
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
         //console.log(`Last event block from database : ${lastEventBlock}`);
@@ -2417,12 +2475,12 @@ async function checkForNewEvents() {
         const latestBlock = BigInt(await fetchLatestBlockFromEtherscan());
         //console.log(`Latest block from Etherscan : ${latestBlock}`);
         
-        // Получение номера последнего проверенного блока из таблицы settings
+        // Получение номера последнего проверенного блока из таблицы settings_test
         const lastCheckedBlock = BigInt(await getLastCheckedBlock());
-        //console.log(`Last checked block from settings : ${lastCheckedBlock}`);
+        //console.log(`Last checked block from settings_test : ${lastCheckedBlock}`);
 
         // Общее логирование информации о блоках
-        console.log(`Block Info - Last event block from database : ${lastEventBlock}, Latest block from Etherscan : ${latestBlock}, Last checked block from settings : ${lastCheckedBlock}`);
+        console.log(`Block Info - Last event block from database : ${lastEventBlock}, Latest block from Etherscan : ${latestBlock}, Last checked block from settings_test : ${lastCheckedBlock}`);
 
         // Выбор начального блока для проверки
         let fromBlock;
@@ -2462,22 +2520,6 @@ async function checkForNewEvents() {
                     autoCompoundAllFound = true;
                 }
             }
-
-            // Проверка блока на наличие других эвентов, если есть 'Deposited' или 'Withdrawn'
-            // for (const event of events) {
-            //     if (['Deposited', 'Withdrawn'].includes(event.event)) {
-            //         const blockNumber = event.blockNumber;
-            //         const blockEvents = await fetchEventsUsingWeb3(blockNumber, blockNumber);
-            //         await storeEvents(blockEvents, true); // Сохранение дополнительных событий
-            //         newEventsFetched = true; // Устанавливаем флаг, если есть новые события
-            //         console.log(`Additional events found in block ${blockNumber} and stored`);
-                
-            //         // Проверка на наличие события AutoCompoundAll среди дополнительных событий
-            //         if (blockEvents.some(event => event.event === 'AutoCompoundAll')) {
-            //             autoCompoundAllFound = true;
-            //         }
-            //     }
-            // }
             
             fromBlock = toBlock + BigInt(1);
         }
@@ -2498,6 +2540,7 @@ async function checkForNewEvents() {
             
             // тестирую
             await missingCheckForEvents() // проверяем блок на упущенные события 
+            await removeDuplicateEvents(); // удаления возможных дублей
 
             await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
             await updateAllWallets(); // Обновляем все кошельки
@@ -2608,11 +2651,28 @@ async function fetchEventsUsingWeb3(fromBlock, toBlock) {
 
 // Функция для расчета доступного к выводу значения
 async function calculateAvailableToWithdraw(valueOrShares) {
-    const totalSupply_ = await retry(() => contractDSF.methods.totalSupply().call()).catch(() => 0);
-    const ratioUser_ = valueOrShares / totalSupply_;
-    console.log(`\nvalueOrShares`, valueOrShares ,`\nratioUser_ = `, ratioUser_);
-    availableToWithdraw_ = await retry(() => contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call()).catch(() => 0);
-    return parseFloat(availableToWithdraw_.toString());
+    try {
+        // Получаем общее предложение токенов
+        const totalSupply_ = await retry(() => contractDSF.methods.totalSupply().call()).catch(() => 0);
+
+        if (totalSupply_ === 0) {
+            console.error(`Total supply is zero, returning 0 for available to withdraw.`);
+            return 0;
+        }
+
+        // Рассчитываем долю пользователя
+        const ratioUser_ = valueOrShares / totalSupply_;
+        console.log(`\nvalueOrShares`, valueOrShares, `\nratioUser_ = `, ratioUser_);
+
+        // Рассчитываем доступное к выводу значение
+        const availableToWithdraw_ = await retry(() => contractDSFStrategy.methods.calcWithdrawOneCoin(ratioUser_, 2).call()).catch(() => 0);
+
+        // Преобразуем значение в float и возвращаем
+        return parseFloat(availableToWithdraw_.toString());
+    } catch (error) {
+        console.error(`Error in calculateAvailableToWithdraw: ${error.message}`);
+        return 0; // Возвращаем 0 в случае ошибки
+    }
 }
 
 // Функция для форматирования больших чисел
@@ -2783,6 +2843,15 @@ async function processEvent(event, isNewEvents) {
                 initializationTelegramBotEvents
             );
 
+            if (availableToWithdrawD === 0 || isNaN(availableToWithdrawD) || availableToWithdrawD === undefined || availableToWithdrawD === null) {
+                availableToWithdrawD = await processTransaction(
+                    event.transactionHash,
+                    event.returnValues.from,
+                    event.returnValues.value,
+                    initializationTelegramBotEvents
+                );
+            }
+
             logWarning(`availableToWithdrawD ${availableToWithdrawD}`);
 
             formattedEvent.returnValues = {
@@ -2911,10 +2980,10 @@ async function processEvent(event, isNewEvents) {
     
                 // Преобразование blockNumber в строку, если это число
                 const balanceDifference = await getBalanceDifferencesForAddresses(addressesStrategy, blockNumberStr);
-                await delay(1000); // Задержка пол секунды
                 formattedEvent.returnValues = {
                     incomeDSF: Number(balanceDifference)
                 };
+                await delay(500); // Задержка пол секунды
 
                 if (initializationTelegramBotEvents) {
                     const message = `Event 'AutoCompoundAll' detected!
@@ -2957,6 +3026,15 @@ async function processEvent(event, isNewEvents) {
                     event.returnValues.value,
                     initializationTelegramBotEvents
                 );
+
+                if (availableToWithdrawT === 0 || isNaN(availableToWithdrawT) || availableToWithdrawT === undefined || availableToWithdrawT === null) {
+                    availableToWithdrawT = await processTransaction(
+                        event.transactionHash,
+                        event.returnValues.from,
+                        event.returnValues.value,
+                        initializationTelegramBotEvents
+                    );
+                }
                 
                 formattedEvent.returnValues = {
                     from: event.returnValues.from,
@@ -2979,19 +3057,24 @@ async function processEvent(event, isNewEvents) {
             }
             break;
     }
-    await delay(200); // Задержка пол секунды
+    await delay(200);
     // Проверяем, есть ли событие уже в базе данных
     const [existingEvent] = await pool.query(
         `SELECT COUNT(*) as count 
-         FROM contract_events 
+         FROM contract_events_test 
          WHERE event = ? AND returnValues = ? AND transactionCostEth = ? AND blockNumber = ?`,
         [formattedEvent.event, JSON.stringify(formattedEvent.returnValues), formattedEvent.transactionCostEth, formattedEvent.blockNumber]
     );
 
     if (existingEvent[0].count === 0) {
         await pool.query(
-            `INSERT INTO contract_events (transactionHash, blockNumber, event, eventDate, transactionCostEth, transactionCostUsd, returnValues)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO contract_events_test (transactionHash, blockNumber, event, eventDate, transactionCostEth, transactionCostUsd, returnValues)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+            eventDate = VALUES(eventDate),
+            transactionCostEth = VALUES(transactionCostEth),
+            transactionCostUsd = VALUES(transactionCostUsd),
+            returnValues = VALUES(returnValues)`,
             [
                 formattedEvent.transactionHash,
                 formattedEvent.blockNumber,
@@ -3020,6 +3103,43 @@ async function processEvent(event, isNewEvents) {
                 await updateUserDeposit(event.returnValues.depositor || event.returnValues.withdrawer);
             }
         }
+    }
+}
+
+// Функция для проверки и удаления дублей
+async function removeDuplicateEvents() {
+    try {
+        // Находим все дублирующиеся события, сгруппированные по идентичным полям event, transactionHash, blockNumber и returnValues
+        const query = `
+            SELECT event, transactionHash, blockNumber, JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$')) as returnValuesString, COUNT(*) as duplicateCount
+            FROM contract_events_test
+            GROUP BY event, transactionHash, blockNumber, returnValuesString
+            HAVING duplicateCount > 1
+        `;
+        const [duplicateEvents] = await pool.query(query);
+
+        if (duplicateEvents.length === 0) {
+            console.log('No duplicate events found.');
+            return;
+        }
+
+        console.log(`Found ${duplicateEvents.length} duplicate event(s).`);
+
+        for (const duplicate of duplicateEvents) {
+            const { event, transactionHash, blockNumber, returnValuesString } = duplicate;
+
+            // Находим и удаляем все дублирующиеся записи, кроме одной
+            const deleteQuery = `
+                DELETE FROM contract_events_test
+                WHERE event = ? AND transactionHash = ? AND blockNumber = ? AND JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$')) = ?
+                LIMIT ?
+            `;
+            await pool.query(deleteQuery, [event, transactionHash, blockNumber, returnValuesString, duplicate.duplicateCount - 1]);
+
+            console.log(`Removed ${duplicate.duplicateCount - 1} duplicate(s) for event ${event} in transaction ${transactionHash}.`);
+        }
+    } catch (error) {
+        console.error('Error while removing duplicate events:', error.message);
     }
 }
 
@@ -3056,15 +3176,17 @@ async function processTransaction(txHash, depositor, lpShares, status) {
             console.log(`No existing record found for txHash: ${txHash}, depositor: ${depositor}`);
         }
 
-        let AvailableToWithdraw;
-        let lpPrice;
+        let AvailableToWithdraw = 0; // Инициализация с нулевым значением
+        let lpPrice = 0; // Инициализация с нулевым значением
 
         if (status) {
             AvailableToWithdraw = await calculateAvailableToWithdraw(lpShares);
             console.log(`Calculated AvailableToWithdraw : ${AvailableToWithdraw}`);
             lpPrice = await retry(() => contractDSF.methods.lpPrice().call()).catch(() => 0);
             console.log(`Fetched lpPrice                : ${lpPrice}`);
-        } else {
+        } 
+        
+        if (AvailableToWithdraw === 0 || isNaN(AvailableToWithdraw) || AvailableToWithdraw === undefined || AvailableToWithdraw === null) {
             try {
                 const response = await axios.get(`https://api.dsf.finance/deposit/all/${depositor}`);
                 const deposits = response.data.deposits;
@@ -3151,7 +3273,7 @@ async function calculateTransferUSDValue(event) {
     let lpShares = 0;
 
     const [events] = await pool.query(
-        `SELECT * FROM contract_events 
+        `SELECT * FROM contract_events_test 
          WHERE JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ? 
          OR JSON_EXTRACT(returnValues, '$.from') = ? OR JSON_EXTRACT(returnValues, '$.to') = ? 
          ORDER BY eventDate ASC`,
@@ -3235,7 +3357,7 @@ app.get('/events/hash/:transactionHash', async (req, res) => {
     try {
         // Найдите событие Transfer по его хэшу транзакции
         const [events] = await pool.query(
-            `SELECT * FROM contract_events WHERE transactionHash = ? AND event = 'Transfer'`,
+            `SELECT * FROM contract_events_test WHERE transactionHash = ? AND event = 'Transfer'`,
             [transactionHash]
         );
 
@@ -3257,7 +3379,7 @@ app.get('/events/hash/:transactionHash', async (req, res) => {
 // Новый маршрут для получения всех событий
 app.get('/events', async (req, res) => {
     try {
-        const [events] = await pool.query('SELECT * FROM contract_events ORDER BY eventDate DESC');
+        const [events] = await pool.query('SELECT * FROM contract_events_test ORDER BY eventDate DESC');
         res.json(events);
     } catch (error) {
         logError(`Failed to fetch contract events : ${error}`);
@@ -3271,7 +3393,7 @@ app.get('/events/:wallet', async (req, res) => {
     
     try {
         const query = `
-            SELECT * FROM contract_events 
+            SELECT * FROM contract_events_test 
             WHERE JSON_EXTRACT(returnValues, '$.depositor') = ?
             OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?
             OR JSON_EXTRACT(returnValues, '$.to') = ?
@@ -3293,22 +3415,22 @@ app.get('/events/:wallet', async (req, res) => {
 //
 //
 
-// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events, из событий 'Deposited', CreatedPendingDeposit и 'Transfer'
+// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events_test, из событий 'Deposited', CreatedPendingDeposit и 'Transfer'
 async function extractUniqueDepositors() {
     let connection;
     try {
         connection = await pool.getConnection();
         const [rows] = await connection.query(`
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) AS depositor
-            FROM contract_events
+            FROM contract_events_test
             WHERE event = 'Deposited'
             UNION
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) AS depositor
-            FROM contract_events
+            FROM contract_events_test
             WHERE event = 'Transfer'
             UNION
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) AS depositor
-            FROM contract_events
+            FROM contract_events_test
             WHERE event = 'CreatedPendingDeposit'
         `);
         return rows.map(row => row.depositor);
@@ -3623,14 +3745,14 @@ app.get('/event-summary', async (req, res) => {
         // Получение всех событий `AutoCompoundAll` и вычисление TotalIncomeDSF и AutoCompoundAllCostUsd
         const [autoCompoundAllEvents] = await pool.query(`
             SELECT SUM(CAST(returnValues->'$.incomeDSF' AS DECIMAL(18, 8))) AS TotalIncomeDSF, SUM(transactionCostUsd) AS AutoCompoundAllCostUsd
-            FROM contract_events
+            FROM contract_events_test
             WHERE event = 'AutoCompoundAll'
         `);
 
         // Получение всех событий `ClaimedAllManagementFee` и вычисление ClaimedAllManagementFeeCostUsd
         const [claimedAllManagementFeeEvents] = await pool.query(`
             SELECT SUM(transactionCostUsd) AS ClaimedAllManagementFeeCostUsd
-            FROM contract_events
+            FROM contract_events_test
             WHERE event = 'ClaimedAllManagementFee'
         `);
 
@@ -3639,7 +3761,7 @@ app.get('/event-summary', async (req, res) => {
             SELECT SUM(transactionCostUsd) AS DepositedCostUsd
             FROM (
                 SELECT DISTINCT blockNumber, transactionCostUsd
-                FROM contract_events
+                FROM contract_events_test
                 WHERE event = 'Deposited' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
             ) AS uniqueDepositedEvents
         `);
@@ -3649,7 +3771,7 @@ app.get('/event-summary', async (req, res) => {
             SELECT SUM(transactionCostUsd) AS WithdrawnCostUsd
             FROM (
                 SELECT DISTINCT blockNumber, transactionCostUsd
-                FROM contract_events
+                FROM contract_events_test
                 WHERE event = 'Withdrawn' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
             ) AS uniqueWithdrawnEvents
         `);
@@ -3698,7 +3820,7 @@ app.get('/monthly-event-summary', async (req, res) => {
                     THEN transactionCostUsd 
                     ELSE 0 
                 END) AS WithdrawnCostUsd
-            FROM contract_events
+            FROM contract_events_test
             GROUP BY month
             ORDER BY month ASC
         `);
@@ -3733,9 +3855,9 @@ async function fetchUniqueDepositors() {
     return rows.map(row => row.depositor_address);
 }
 
-// Сбор данных из contract_events и таблицы событий
+// Сбор данных из contract_events_test и таблицы событий
 async function fetchAllEvents() {
-    const query = `SELECT * FROM contract_events WHERE event IN ('Deposited', 'Withdrawn', 'Transfer', 'AutoCompoundAll') ORDER BY blockNumber ASC`;
+    const query = `SELECT * FROM contract_events_test WHERE event IN ('Deposited', 'Withdrawn', 'Transfer', 'AutoCompoundAll') ORDER BY blockNumber ASC`;
     const [rows] = await pool.query(query);
     console.log(`Fetched ${rows.length} events`);
     return rows;
@@ -3897,7 +4019,7 @@ app.get('/request/events', checkApiKey, async (req, res) => {
     
     try {
         const query = `
-            SELECT * FROM contract_events 
+            SELECT * FROM contract_events_test 
             WHERE JSON_EXTRACT(returnValues, '$.depositor') = ?
             OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?
             OR JSON_EXTRACT(returnValues, '$.to') = ?
@@ -3918,12 +4040,12 @@ app.get('/request/events', checkApiKey, async (req, res) => {
 app.get('/request/incomDSFfromEveryOne', checkApiKey, async (req, res) => {
     const { wallet } = req.query;
     try {
-        const query = `SELECT * FROM incomDSFfromEveryOne WHERE wallet_address = ?`;
+        const query = `SELECT * FROM incomDSFfromEveryOne_test WHERE wallet_address = ?`;
         const [rows] = await pool.query(query, [wallet]);
-        console.log(`Fetched incomDSFfromEveryOne data for wallet ${wallet}: ${JSON.stringify(rows)}`);
+        console.log(`Fetched incomDSFfromEveryOne_test data for wallet ${wallet}: ${JSON.stringify(rows)}`);
         res.json(rows[0] || {});
     } catch (error) {
-        console.error(`Failed to fetch incomDSFfromEveryOne data for wallet ${wallet}: ${error.message}`);
+        console.error(`Failed to fetch incomDSFfromEveryOne_test data for wallet ${wallet}: ${error.message}`);
         res.status(500).send('Failed to fetch data');
     }
 });
@@ -3940,10 +4062,12 @@ app.get('/request/walletinfo', checkApiKey, async (req, res) => {
         const walletAddress_ = wallet.toLowerCase();
         const walletAddress = normalizeAddress(walletAddress_);
 
+        const apyToday = await getApyToday().catch(() => 0);
+
         // Если адрес некорректный, возвращаем значения по умолчанию
         if (!walletAddress) {
             logError('Invalid wallet address:', walletAddress_);
-            return res.json(getDefaultWalletData(0, 0, 0, 0));
+            return res.json(getDefaultWalletData(0, 0, 0, 0, apyToday));
         }
 
         console.log(`\nWallet Address          :`, walletAddress);
@@ -3966,7 +4090,7 @@ app.get('/request/walletinfo', checkApiKey, async (req, res) => {
             if (walletRows.length === 0) {
                 // Если кошелек не найден в wallet_info, возвращаем ошибку
                 logWarning(`Wallet ${walletAddress} not found in wallet_info.`);
-                return res.json(getDefaultWalletData(0, 0, 0, 0));
+                return res.json(getDefaultWalletData(0, 0, 0, 0, apyToday));
             } else {
                 // Если данные уже есть, возвращаем их
                 console.log(`Данные кошелька уже есть`);
@@ -3985,6 +4109,7 @@ app.get('/request/walletinfo', checkApiKey, async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
+
 
 //
 //
@@ -4033,6 +4158,7 @@ const updateAllData = async () => {
 
         // Проверка на упущенные Events
         await initializeMissingEvents().catch(console.error);
+        await removeDuplicateEvents(); // удаления возможных дублей
         await delay(40000); // Задержка 40 секунда
 
         // Инициализация таблицы и заполнение уникальными депозиторами
