@@ -143,8 +143,8 @@ async function testConnection() {
 
 testConnection();
 
-// For RESTART DataBase apy_info_test:  
-// const dropTableQuery = `DROP TABLE IF EXISTS apy_info_test;`;
+// For RESTART DataBase apy_info:  
+// const dropTableQuery = `DROP TABLE IF EXISTS apy_info;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
@@ -158,18 +158,18 @@ testConnection();
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase wallet_info_test: 
-// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info_test;`;
+// For RESTART DataBase wallet_info: 
+// const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase contract_events_test: 
-// const dropTableQuery = `DROP TABLE IF EXISTS contract_events_test;`;
+// For RESTART DataBase contract_events: 
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
-// For RESTART DataBase personal_yield_rate_test: 
-// const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate_test;`;
+// For RESTART DataBase personal_yield_rate: 
+// const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
 //         await pool.query(dropTableQuery);
 //         console.log(`Таблица успешно удалена`);
 
@@ -184,9 +184,9 @@ testConnection();
 //
 //
 
-// Таблица wallet_info_test
+// Таблица wallet_info
 const createWalletTableQuery = `
-    CREATE TABLE IF NOT EXISTS wallet_info_test (
+    CREATE TABLE IF NOT EXISTS wallet_info (
         id INT AUTO_INCREMENT PRIMARY KEY,
         wallet_address VARCHAR(255) NOT NULL UNIQUE,
         user_deposits DECIMAL(36, 2) NOT NULL,
@@ -212,9 +212,9 @@ async function initializeDatabaseWallet() {
     try {
         connection = await pool.getConnection();
         await connection.query(createWalletTableQuery);
-        logSuccess(`\nTable 'wallet_info_test' checked/created successfully.\n`);
+        logSuccess(`\nTable 'wallet_info' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'wallet_info_test' table : ${error}\n`);
+        logError(`\nFailed to create 'wallet_info' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -224,7 +224,7 @@ initializeDatabaseWallet();
 
 // Таблица для хранениния номера последнего проверенного блока
 const createSettingsTableQuery = `
-    CREATE TABLE IF NOT EXISTS settings_test (
+    CREATE TABLE IF NOT EXISTS settings (
         id INT AUTO_INCREMENT PRIMARY KEY,
         setting_key VARCHAR(255) NOT NULL UNIQUE,
         value VARCHAR(255) NOT NULL
@@ -236,9 +236,9 @@ async function initializeDatabaseSettings() {
     try {
         connection = await pool.getConnection();
         await connection.query(createSettingsTableQuery);
-        logSuccess(`\nTable 'settings_test' checked/created successfully.\n`);
+        logSuccess(`\nTable 'settings' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'settings_test' table : ${error}\n`);
+        logError(`\nFailed to create 'settings' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -247,9 +247,9 @@ async function initializeDatabaseSettings() {
 initializeDatabaseSettings();
 
 //NEW
-// Таблица apy_info_test
+// Таблица apy_info
 const createApyTableQuery = `
-    CREATE TABLE IF NOT EXISTS apy_info_test (
+    CREATE TABLE IF NOT EXISTS apy_info (
         id INT AUTO_INCREMENT PRIMARY KEY,
         timestamp DATETIME NOT NULL UNIQUE,
         apy DECIMAL(10, 4) NOT NULL,
@@ -263,9 +263,9 @@ async function initializeDatabaseApy() {
     try {
         connection = await pool.getConnection();
         await connection.query(createApyTableQuery);
-        logSuccess(`\nTable 'apy_info_test' checked/created successfully.\n`);
+        logSuccess(`\nTable 'apy_info' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'apy_info_test' table : ${error}\n`);
+        logError(`\nFailed to create 'apy_info' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -331,9 +331,9 @@ async function initializeUniqueDepositorsTable() {
 initializeUniqueDepositorsTable();
 
 //NEW 
-// Таблица contract_events_test 
+// Таблица contract_events 
 const createAllContractEventsTableQuery = `
-    CREATE TABLE IF NOT EXISTS contract_events_test (
+    CREATE TABLE IF NOT EXISTS contract_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
         event VARCHAR(255),
         eventDate TIMESTAMP,
@@ -352,9 +352,9 @@ async function initializeAllContractEventsTable() {
     try {
         connection = await pool.getConnection();
         await connection.query(createAllContractEventsTableQuery);
-        logSuccess(`\nTable 'contract_events_test' checked/created successfully.\n`);
+        logSuccess(`\nTable 'contract_events' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'contract_events_test' table : ${error}\n`);
+        logError(`\nFailed to create 'contract_events' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -419,9 +419,9 @@ async function initializeDatabaseIncomDSF() {
 
 initializeDatabaseIncomDSF();
 
-// Таблица personal_yield_rate_test для хранения персональной ставки доходности
+// Таблица personal_yield_rate для хранения персональной ставки доходности
 const createPersonalYieldRateTableQuery = `
-    CREATE TABLE IF NOT EXISTS personal_yield_rate_test (
+    CREATE TABLE IF NOT EXISTS personal_yield_rate (
         id INT AUTO_INCREMENT PRIMARY KEY,
         depositor_address VARCHAR(255) NOT NULL,
         date DATE NOT NULL,
@@ -438,9 +438,9 @@ async function initializePersonalYieldRateTable() {
     try {
         connection = await pool.getConnection();
         await connection.query(createPersonalYieldRateTableQuery);
-        logSuccess(`\nTable 'personal_yield_rate_test' checked/created successfully.\n`);
+        logSuccess(`\nTable 'personal_yield_rate' checked/created successfully.\n`);
     } catch (error) {
-        logError(`\nFailed to create 'personal_yield_rate_test' table : ${error}\n`);
+        logError(`\nFailed to create 'personal_yield_rate' table : ${error}\n`);
     } finally {
         if (connection) connection.release();
     }
@@ -1028,7 +1028,7 @@ async function calculateCurrentDeposit(walletAddress) {
 
         // Получаем все события для данного депозитора
         const [events] = await connection.query(
-            `SELECT * FROM contract_events_test 
+            `SELECT * FROM contract_events 
              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.from')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
@@ -1221,7 +1221,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
 
         // Получаем все события для данного депозитора
         const [events] = await connection.query(
-            `SELECT * FROM contract_events_test 
+            `SELECT * FROM contract_events 
              WHERE JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.from')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) = ? 
                 OR JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) = ? 
@@ -1403,7 +1403,7 @@ async function calculateWeightedYieldRate(walletAddress, availableToWithdraw, cv
 
         // Вставляем или обновляем запись для текущего депозитора и даты
         const insertQuery = `
-            INSERT INTO personal_yield_rate_test (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
+            INSERT INTO personal_yield_rate (depositor_address, date, daily_income, daily_yield_rate, annual_apy)
             VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
             daily_income = VALUES(daily_income),
@@ -1431,7 +1431,7 @@ async function calculateSavingsAndSpending(wallet) {
     
     const spendingQuery = `
     SELECT SUM(transactionCostEth) AS totalEthSpent, SUM(transactionCostUsd) AS totalUsdSpent
-    FROM contract_events_test
+    FROM contract_events
     WHERE 
         (
             event IN ('CreatedPendingDeposit', 'CreatedPendingWithdrawal')
@@ -1444,7 +1444,7 @@ async function calculateSavingsAndSpending(wallet) {
 
     const savingsQuery = `
         SELECT SUM(transactionCostEth) AS totalEthOptimized, SUM(transactionCostUsd) AS totalUsdOptimized
-        FROM contract_events_test
+        FROM contract_events
         WHERE (event = 'Withdrawn' OR event = 'Deposited')
         AND JSON_EXTRACT(returnValues, '$.transaction_status') = 'Optimized'
         AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
@@ -1452,7 +1452,7 @@ async function calculateSavingsAndSpending(wallet) {
 
     const pendingCostsQuery = `
         SELECT SUM(transactionCostEth) AS totalEthPending, SUM(transactionCostUsd) AS totalUsdPending
-        FROM contract_events_test
+        FROM contract_events
         WHERE (event = 'CreatedPendingDeposit' OR event = 'CreatedPendingWithdrawal')
         AND (JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?)
     `;
@@ -1511,7 +1511,7 @@ async function calculateTotalSavingsAndSpending() {
             SUM(usd_spent) AS totalUsdSpent,
             SUM(eth_saved) AS totalEthSaved,
             SUM(usd_saved) AS totalUsdSaved
-        FROM wallet_info_test
+        FROM wallet_info
     `;
 
     let connection;
@@ -1560,14 +1560,14 @@ async function updateWalletData(walletAddress, cachedData) {
         // Получение соединения с базой данных
         connection = await pool.getConnection();
 
-        // Проверяем наличие кошелька в таблице wallet_info_test
-        const [rows] = await connection.query('SELECT wallet_address FROM wallet_info_test WHERE wallet_address = ?', [walletAddress]);
+        // Проверяем наличие кошелька в таблице wallet_info
+        const [rows] = await connection.query('SELECT wallet_address FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
         console.log(`Existing wallet data from database : `, rows);
 
         if (rows.length === 0) {
             // Если кошелька нет в базе, вставляем новую запись
             const insertQuery = `
-                INSERT INTO wallet_info_test (
+                INSERT INTO wallet_info (
                     wallet_address,
                     user_deposits,
                     dsf_lp_balance,
@@ -1611,7 +1611,7 @@ async function updateWalletData(walletAddress, cachedData) {
         } else {
             // Запрос на обновление данных в базе данных
             const updateQuery = `
-                UPDATE wallet_info_test SET
+                UPDATE wallet_info SET
                 user_deposits = ?,
                 dsf_lp_balance = ?,
                 ratio_user = ?,
@@ -1677,7 +1677,7 @@ async function updateWalletDataSingl(walletAddress) {
         
         // Запрос на обновление данных в базе данных
         const updateQuery = `
-            UPDATE wallet_info_test SET
+            UPDATE wallet_info SET
             user_deposits = ?,
             dsf_lp_balance = ?,
             ratio_user = ?,
@@ -1848,7 +1848,7 @@ app.get('/wallets', async (req, res) => {
         connection = await pool.getConnection();
 
         // Получаем все кошельки из базы данных
-        const [rows] = await connection.query('SELECT * FROM wallet_info_test');
+        const [rows] = await connection.query('SELECT * FROM wallet_info');
 
         // Отправляем список кошельков клиенту в формате JSON
         res.json(rows);
@@ -1921,16 +1921,16 @@ app.get('/wallet/:walletAddress', async (req, res) => {
         
         if (rows.length === 0 && dsfLpBalance === 0) {
             // Если кошелек не найден в unique_depositors и dsfLpBalance равно нулю, возвращаем пустые данные
-            logWarning('Wallet not found in unique_depositors_test.');
+            logWarning('Wallet not found in unique_depositors.');
             return res.json(getDefaultWalletData(0, 0, 0, 0, apyToday));
         }
 
-        // Проверяем наличие кошелька в базе данных wallet_info_test
-        const [walletRows] = await connection.query('SELECT * FROM wallet_info_test WHERE wallet_address = ?', [walletAddress]);
-        console.log(`Rows from database wallet_info_test : ${walletRows}`);
+        // Проверяем наличие кошелька в базе данных wallet_info
+        const [walletRows] = await connection.query('SELECT * FROM wallet_info WHERE wallet_address = ?', [walletAddress]);
+        console.log(`Rows from database wallet_info : ${walletRows}`);
 
         if (walletRows.length === 0) {
-            // Если кошелек не найден в wallet_info_test, получаем данные и сохраняем их
+            // Если кошелек не найден в wallet_info, получаем данные и сохраняем их
             console.log(`Получаем данные кошелька`);
             try {
                 const walletData = await getWalletData(walletAddress);
@@ -1938,7 +1938,7 @@ app.get('/wallet/:walletAddress', async (req, res) => {
                 // Проверяем значения dsfLpBalance и safeRatioUser
                 if (walletData.dsfLpBalance > 0 || walletData.safeRatioUser > 0) {
                     const insertQuery = `
-                        INSERT INTO wallet_info_test (
+                        INSERT INTO wallet_info (
                             wallet_address,
                             user_deposits,
                             dsf_lp_balance,
@@ -2060,13 +2060,13 @@ async function upsertApyData(timestamp, apy) {
     let connection = await pool.getConnection();
 
     // Получаем все записи с такой же датой
-    const checkQuery = `SELECT timestamp FROM apy_info_test WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC`;
+    const checkQuery = `SELECT timestamp FROM apy_info WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC`;
     const [rows] = await connection.query(checkQuery, [timestamp]);
 
     if (rows.length === 0) {
         // Если записи с такой датой нет, добавляем новую запись
         const insertQuery = `
-            INSERT INTO apy_info_test (timestamp, apy)
+            INSERT INTO apy_info (timestamp, apy)
             VALUES (?, ?)
             ON DUPLICATE KEY UPDATE
             apy = VALUES(apy), updated_at = CURRENT_TIMESTAMP
@@ -2080,7 +2080,7 @@ async function upsertApyData(timestamp, apy) {
         if (latestTime > existingTime) {
             // Если новое время свежее, обновляем запись
             const updateQuery = `
-                UPDATE apy_info_test SET timestamp = ?, apy = ?, updated_at = CURRENT_TIMESTAMP
+                UPDATE apy_info SET timestamp = ?, apy = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE DATE(timestamp) = DATE(?)
             `;
             await connection.query(updateQuery, [timestamp, apy, timestamp]);
@@ -2152,7 +2152,7 @@ app.get('/apy', async (req, res) => {
         connection = await pool.getConnection();
 
         // Получаем все записи APY из базы данных в хронологическом порядке
-        const [rows] = await connection.query('SELECT timestamp AS date, apy FROM apy_info_test ORDER BY timestamp ASC');
+        const [rows] = await connection.query('SELECT timestamp AS date, apy FROM apy_info ORDER BY timestamp ASC');
 
         // Отправляем список записей APY клиенту в формате JSON
         res.json(rows);
@@ -2374,7 +2374,7 @@ async function initializeMissingEvents() {
     try {
         console.log(`Initializing missing events...`);
 
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
 
@@ -2409,7 +2409,7 @@ async function missingCheckForEvents() {
         await delay(1000); // Задержка 1 секунда
         console.log(`Additional block check...`);
 
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
 
@@ -2438,7 +2438,7 @@ async function missingCheckForEvents() {
 async function updateLastCheckedBlock(blockNumber) {
     try {
         //console.log(`Updated last checked block to ${blockNumber}`);
-        const updateQuery = `INSERT INTO settings_test (setting_key, value) VALUES ('last_checked_block', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)`;
+        const updateQuery = `INSERT INTO settings (setting_key, value) VALUES ('last_checked_block', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)`;
         await pool.query(updateQuery, [blockNumber.toString()]);
     } catch (error) {
         logError(`Failed to update last checked block : ${error.message}`);
@@ -2447,7 +2447,7 @@ async function updateLastCheckedBlock(blockNumber) {
 //New2
 // Функция для получения последнего проверенного блока из базы данных
 async function getLastCheckedBlock() {
-    const selectQuery = `SELECT value FROM settings_test WHERE setting_key = 'last_checked_block'`;
+    const selectQuery = `SELECT value FROM settings WHERE setting_key = 'last_checked_block'`;
     const [rows] = await pool.query(selectQuery);
     return rows.length ? BigInt(rows[0].value) : BigInt(0);
 }
@@ -2466,7 +2466,7 @@ async function checkForNewEvents() {
         logWarning(`Checking for new events...`);
 
         // Получение номера последнего блока с событиями из базы данных
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events_test`;
+        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
         //console.log(`Last event block from database : ${lastEventBlock}`);
@@ -2475,12 +2475,12 @@ async function checkForNewEvents() {
         const latestBlock = BigInt(await fetchLatestBlockFromEtherscan());
         //console.log(`Latest block from Etherscan : ${latestBlock}`);
         
-        // Получение номера последнего проверенного блока из таблицы settings_test
+        // Получение номера последнего проверенного блока из таблицы settings
         const lastCheckedBlock = BigInt(await getLastCheckedBlock());
-        //console.log(`Last checked block from settings_test : ${lastCheckedBlock}`);
+        //console.log(`Last checked block from settings : ${lastCheckedBlock}`);
 
         // Общее логирование информации о блоках
-        console.log(`Block Info - Last event block from database : ${lastEventBlock}, Latest block from Etherscan : ${latestBlock}, Last checked block from settings_test : ${lastCheckedBlock}`);
+        console.log(`Block Info - Last event block from database : ${lastEventBlock}, Latest block from Etherscan : ${latestBlock}, Last checked block from settings : ${lastCheckedBlock}`);
 
         // Выбор начального блока для проверки
         let fromBlock;
@@ -3061,14 +3061,14 @@ async function processEvent(event, isNewEvents) {
     // Проверяем, есть ли событие уже в базе данных
     const [existingEvent] = await pool.query(
         `SELECT COUNT(*) as count 
-         FROM contract_events_test 
+         FROM contract_events 
          WHERE event = ? AND returnValues = ? AND transactionCostEth = ? AND blockNumber = ?`,
         [formattedEvent.event, JSON.stringify(formattedEvent.returnValues), formattedEvent.transactionCostEth, formattedEvent.blockNumber]
     );
 
     if (existingEvent[0].count === 0) {
         await pool.query(
-            `INSERT INTO contract_events_test (transactionHash, blockNumber, event, eventDate, transactionCostEth, transactionCostUsd, returnValues)
+            `INSERT INTO contract_events (transactionHash, blockNumber, event, eventDate, transactionCostEth, transactionCostUsd, returnValues)
              VALUES (?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
             eventDate = VALUES(eventDate),
@@ -3112,7 +3112,7 @@ async function removeDuplicateEvents() {
         // Находим все дублирующиеся события, сгруппированные по идентичным полям event, transactionHash, blockNumber и returnValues
         const query = `
             SELECT event, transactionHash, blockNumber, JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$')) as returnValuesString, COUNT(*) as duplicateCount
-            FROM contract_events_test
+            FROM contract_events
             GROUP BY event, transactionHash, blockNumber, returnValuesString
             HAVING duplicateCount > 1
         `;
@@ -3130,7 +3130,7 @@ async function removeDuplicateEvents() {
 
             // Находим и удаляем все дублирующиеся записи, кроме одной
             const deleteQuery = `
-                DELETE FROM contract_events_test
+                DELETE FROM contract_events
                 WHERE event = ? AND transactionHash = ? AND blockNumber = ? AND JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$')) = ?
                 LIMIT ?
             `;
@@ -3273,7 +3273,7 @@ async function calculateTransferUSDValue(event) {
     let lpShares = 0;
 
     const [events] = await pool.query(
-        `SELECT * FROM contract_events_test 
+        `SELECT * FROM contract_events 
          WHERE JSON_EXTRACT(returnValues, '$.depositor') = ? OR JSON_EXTRACT(returnValues, '$.withdrawer') = ? 
          OR JSON_EXTRACT(returnValues, '$.from') = ? OR JSON_EXTRACT(returnValues, '$.to') = ? 
          ORDER BY eventDate ASC`,
@@ -3357,7 +3357,7 @@ app.get('/events/hash/:transactionHash', async (req, res) => {
     try {
         // Найдите событие Transfer по его хэшу транзакции
         const [events] = await pool.query(
-            `SELECT * FROM contract_events_test WHERE transactionHash = ? AND event = 'Transfer'`,
+            `SELECT * FROM contract_events WHERE transactionHash = ? AND event = 'Transfer'`,
             [transactionHash]
         );
 
@@ -3379,7 +3379,7 @@ app.get('/events/hash/:transactionHash', async (req, res) => {
 // Новый маршрут для получения всех событий
 app.get('/events', async (req, res) => {
     try {
-        const [events] = await pool.query('SELECT * FROM contract_events_test ORDER BY eventDate DESC');
+        const [events] = await pool.query('SELECT * FROM contract_events ORDER BY eventDate DESC');
         res.json(events);
     } catch (error) {
         logError(`Failed to fetch contract events : ${error}`);
@@ -3393,7 +3393,7 @@ app.get('/events/:wallet', async (req, res) => {
     
     try {
         const query = `
-            SELECT * FROM contract_events_test 
+            SELECT * FROM contract_events 
             WHERE JSON_EXTRACT(returnValues, '$.depositor') = ?
             OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?
             OR JSON_EXTRACT(returnValues, '$.to') = ?
@@ -3415,22 +3415,22 @@ app.get('/events/:wallet', async (req, res) => {
 //
 //
 
-// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events_test, из событий 'Deposited', CreatedPendingDeposit и 'Transfer'
+// Функция для извлечения уникальных адресов депозиторов из таблицы contract_events, из событий 'Deposited', CreatedPendingDeposit и 'Transfer'
 async function extractUniqueDepositors() {
     let connection;
     try {
         connection = await pool.getConnection();
         const [rows] = await connection.query(`
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) AS depositor
-            FROM contract_events_test
+            FROM contract_events
             WHERE event = 'Deposited'
             UNION
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.to')) AS depositor
-            FROM contract_events_test
+            FROM contract_events
             WHERE event = 'Transfer'
             UNION
             SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(returnValues, '$.depositor')) AS depositor
-            FROM contract_events_test
+            FROM contract_events
             WHERE event = 'CreatedPendingDeposit'
         `);
         return rows.map(row => row.depositor);
@@ -3745,14 +3745,14 @@ app.get('/event-summary', async (req, res) => {
         // Получение всех событий `AutoCompoundAll` и вычисление TotalIncomeDSF и AutoCompoundAllCostUsd
         const [autoCompoundAllEvents] = await pool.query(`
             SELECT SUM(CAST(returnValues->'$.incomeDSF' AS DECIMAL(18, 8))) AS TotalIncomeDSF, SUM(transactionCostUsd) AS AutoCompoundAllCostUsd
-            FROM contract_events_test
+            FROM contract_events
             WHERE event = 'AutoCompoundAll'
         `);
 
         // Получение всех событий `ClaimedAllManagementFee` и вычисление ClaimedAllManagementFeeCostUsd
         const [claimedAllManagementFeeEvents] = await pool.query(`
             SELECT SUM(transactionCostUsd) AS ClaimedAllManagementFeeCostUsd
-            FROM contract_events_test
+            FROM contract_events
             WHERE event = 'ClaimedAllManagementFee'
         `);
 
@@ -3761,7 +3761,7 @@ app.get('/event-summary', async (req, res) => {
             SELECT SUM(transactionCostUsd) AS DepositedCostUsd
             FROM (
                 SELECT DISTINCT blockNumber, transactionCostUsd
-                FROM contract_events_test
+                FROM contract_events
                 WHERE event = 'Deposited' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
             ) AS uniqueDepositedEvents
         `);
@@ -3771,7 +3771,7 @@ app.get('/event-summary', async (req, res) => {
             SELECT SUM(transactionCostUsd) AS WithdrawnCostUsd
             FROM (
                 SELECT DISTINCT blockNumber, transactionCostUsd
-                FROM contract_events_test
+                FROM contract_events
                 WHERE event = 'Withdrawn' AND JSON_UNQUOTE(returnValues->'$.transaction_status') = 'Optimized'
             ) AS uniqueWithdrawnEvents
         `);
@@ -3820,7 +3820,7 @@ app.get('/monthly-event-summary', async (req, res) => {
                     THEN transactionCostUsd 
                     ELSE 0 
                 END) AS WithdrawnCostUsd
-            FROM contract_events_test
+            FROM contract_events
             GROUP BY month
             ORDER BY month ASC
         `);
@@ -3855,9 +3855,9 @@ async function fetchUniqueDepositors() {
     return rows.map(row => row.depositor_address);
 }
 
-// Сбор данных из contract_events_test и таблицы событий
+// Сбор данных из contract_events и таблицы событий
 async function fetchAllEvents() {
-    const query = `SELECT * FROM contract_events_test WHERE event IN ('Deposited', 'Withdrawn', 'Transfer', 'AutoCompoundAll') ORDER BY blockNumber ASC`;
+    const query = `SELECT * FROM contract_events WHERE event IN ('Deposited', 'Withdrawn', 'Transfer', 'AutoCompoundAll') ORDER BY blockNumber ASC`;
     const [rows] = await pool.query(query);
     console.log(`Fetched ${rows.length} events`);
     return rows;
@@ -4019,7 +4019,7 @@ app.get('/request/events', checkApiKey, async (req, res) => {
     
     try {
         const query = `
-            SELECT * FROM contract_events_test 
+            SELECT * FROM contract_events 
             WHERE JSON_EXTRACT(returnValues, '$.depositor') = ?
             OR JSON_EXTRACT(returnValues, '$.withdrawer') = ?
             OR JSON_EXTRACT(returnValues, '$.to') = ?
@@ -4040,12 +4040,12 @@ app.get('/request/events', checkApiKey, async (req, res) => {
 app.get('/request/incomDSFfromEveryOne', checkApiKey, async (req, res) => {
     const { wallet } = req.query;
     try {
-        const query = `SELECT * FROM incomDSFfromEveryOne_test WHERE wallet_address = ?`;
+        const query = `SELECT * FROM incomDSFfromEveryOne WHERE wallet_address = ?`;
         const [rows] = await pool.query(query, [wallet]);
-        console.log(`Fetched incomDSFfromEveryOne_test data for wallet ${wallet}: ${JSON.stringify(rows)}`);
+        console.log(`Fetched incomDSFfromEveryOne data for wallet ${wallet}: ${JSON.stringify(rows)}`);
         res.json(rows[0] || {});
     } catch (error) {
-        console.error(`Failed to fetch incomDSFfromEveryOne_test data for wallet ${wallet}: ${error.message}`);
+        console.error(`Failed to fetch incomDSFfromEveryOne data for wallet ${wallet}: ${error.message}`);
         res.status(500).send('Failed to fetch data');
     }
 });
