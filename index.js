@@ -20,6 +20,7 @@ const ethPriceCache = new NodeCache({ stdTTL: 3600 }); // Кеш с времен
 const userDepositsCache = new NodeCache({ stdTTL: 86400 }); // Кэш с TTL 86400 секунд (24 часа)
 const apyCache = new NodeCache({ stdTTL: 10800 }); // 10800  секунд = 3 часа
 
+const llama = new NodeCache({ stdTTL: 10800 }); // АПИ из дефиламы без изменений
 
 // Параметры конфигурации для pLimit
 const MAX_CONCURRENT_REQUESTS = 5; // Максимальное количество одновременных запросов
@@ -4130,6 +4131,33 @@ app.get('/transactions/:address/:blockNumber', async (req, res) => {
     }
 });
 
+const CHART_URL = 'https://yields.llama.fi/chart/8a20c472-142c-4442-b724-40f2183c073e';
+
+// АПИ из ДефиЛАМА
+app.get('/yields_llama', async (req, res) => {
+    try {
+        // Проверяем наличие данных в кэше
+        const cachedData = llama.get('chartData');
+        if (cachedData) {
+            console.log('Returning cached data');
+            return res.json(cachedData);
+        }
+
+        // Данные не найдены в кэше, выполняем запрос
+        const response = await axios.get(CHART_URL);
+        const chartData = response.data;
+
+        // Сохраняем данные в кэш
+        llama.set('chartData', chartData);
+        console.log('Data fetched and cached');
+
+        // Возвращаем данные клиенту
+        res.json(chartData);
+    } catch (error) {
+        console.error('Error fetching chart data:', error.message);
+        res.status(500).json({ error: 'Failed to fetch chart data' });
+    }
+});
 
 //
 //
