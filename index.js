@@ -2736,7 +2736,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Функция для обработки событий
 async function processEvent(event) {
 
-    //await delay(900); // Задержка 900 миллисекунд
+    await delay(900); // Задержка 900 миллисекунд
 
     const block = await web3.eth.getBlock(event.blockNumber);
     const eventDate = new Date(Number(block.timestamp) * 1000);
