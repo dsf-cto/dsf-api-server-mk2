@@ -165,9 +165,9 @@ const dropTableQuery = `DROP TABLE IF EXISTS wallet_info;`;
         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
-// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-//         await pool.query(dropTableQuery);
-//         console.log(`Таблица успешно удалена`);
+const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
+        await pool.query(dropTableQuery);
+        console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
