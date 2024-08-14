@@ -1,4 +1,4 @@
-// DSF.Finance API Server Mk6.7
+// DSF.Finance API Server Mk6
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
@@ -2684,7 +2684,7 @@ function formatBigInt(value, decimals) {
 // тест
 // Функция для хранения событий
 async function storeEvents(events) {
-    const MAX_CONCURRENT_REQUESTS = 10; // Определяем максимальное количество одновременных запросов
+    const MAX_CONCURRENT_REQUESTS = 6; // Определяем максимальное количество одновременных запросов
     const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
     const [transferEvents, otherEvents] = events.reduce(
@@ -2703,13 +2703,40 @@ async function storeEvents(events) {
     await Promise.all(transferEvents.map(event => limit(() => processEvent(event))));
 }
 
+// async function storeEvents(events) {
+
+//     // Separate Transfer events from other events
+//     const transferEvents = [];
+//     const otherEvents = [];
+
+//     for (const event of events) {
+//         if (event.event === 'Transfer') {
+//             transferEvents.push(event);
+//         } else {
+//             otherEvents.push(event);
+//         }
+//     }
+
+//     // Process non-Transfer events first
+//     // Сначала обрабатываем события, отличные от Transfer
+//     for (const event of otherEvents) {
+//         await processEvent(event);
+//     }
+
+//     // Process Transfer events
+//     // Затем обрабатываем события Transfer
+//     for (const event of transferEvents) {
+//         await processEvent(event);
+//     }
+// }
+
 // Функция для добавления задержки
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Функция для обработки событий
 async function processEvent(event) {
 
-    await delay(1200); // Задержка 1200 миллисекунд
+    //await delay(900); // Задержка 900 миллисекунд
 
     const block = await web3.eth.getBlock(event.blockNumber);
     const eventDate = new Date(Number(block.timestamp) * 1000);
@@ -2810,21 +2837,14 @@ async function processEvent(event) {
 
             // Интеграция processTransaction для событий 'Deposited'
             console.log(`Calling processTransaction for Deposited event. txHash: ${event.transactionHash}, depositor: ${event.returnValues.depositor}, lpShares: ${event.returnValues.lpShares}`);
+            logWarning(`depositor: ${event.returnValues.depositor}, lpShares: ${event.returnValues.lpShares}`);
+
             const availableToWithdrawD = await processTransaction(
                 event.transactionHash,
                 event.returnValues.depositor,
                 event.returnValues.lpShares,
                 initializationTelegramBotEvents
             );
-
-            if (availableToWithdrawD === 0 || isNaN(availableToWithdrawD) || availableToWithdrawD === undefined || availableToWithdrawD === null) {
-                availableToWithdrawD = await processTransaction(
-                    event.transactionHash,
-                    event.returnValues.from,
-                    event.returnValues.value,
-                    initializationTelegramBotEvents
-                );
-            }
 
             logWarning(`availableToWithdrawD ${availableToWithdrawD}`);
 
@@ -3000,15 +3020,6 @@ async function processEvent(event) {
                     event.returnValues.value,
                     initializationTelegramBotEvents
                 );
-
-                if (availableToWithdrawT === 0 || isNaN(availableToWithdrawT) || availableToWithdrawT === undefined || availableToWithdrawT === null) {
-                    availableToWithdrawT = await processTransaction(
-                        event.transactionHash,
-                        event.returnValues.from,
-                        event.returnValues.value,
-                        initializationTelegramBotEvents
-                    );
-                }
                 
                 formattedEvent.returnValues = {
                     from: event.returnValues.from,
@@ -3132,9 +3143,11 @@ async function updateUserDeposit(walletAddress) {
 // Получаем и сохраням информацио WithdrawOneCoin для конкретных транзакций
 async function processTransaction(txHash, depositor, lpShares, status) {
     console.log(`Processing transaction: ${txHash}, depositor: ${depositor}, lpShares: ${lpShares}, status: ${status}`);
-
+    
     try {
         const [existingRecord] = await pool.query('SELECT * FROM transactionsWOCoin WHERE txHash = ? AND depositor = ?', [txHash, depositor]);
+        logSuccess(`depositor ${depositor}`)
+        const depositor_ = normalizeAddress(depositor);
 
         console.log(`existingRecord.length`, existingRecord.length);
         console.log(`Query result for existing record: ${JSON.stringify(existingRecord)}`);
@@ -3150,53 +3163,58 @@ async function processTransaction(txHash, depositor, lpShares, status) {
         let lpPrice = 0; // Инициализация с нулевым значением
 
         if (status) {
-            AvailableToWithdraw = await calculateAvailableToWithdraw(lpShares);
-            logSuccess(`Calculated AvailableToWithdraw : ${AvailableToWithdraw}`);
-            lpPrice = await retry(() => contractDSF.methods.lpPrice().call()).catch(() => 0);
-            logSuccess(`Fetched lpPrice                : ${lpPrice}`);
-        } 
-        
-        if (AvailableToWithdraw === 0 || isNaN(AvailableToWithdraw) || AvailableToWithdraw === undefined || AvailableToWithdraw === null) {
             try {
-                const response = await axios.get(`https://api.dsf.finance/deposit/all/${depositor}`);
+                AvailableToWithdraw = await calculateAvailableToWithdraw(lpShares);
+                logSuccess(`Calculated AvailableToWithdraw : ${AvailableToWithdraw}`);
+                lpPrice = await retry(() => contractDSF.methods.lpPrice().call()).catch(() => 0);
+                logSuccess(`Fetched lpPrice                : ${lpPrice}`);
+                
+            } catch (error) {
+                console.error(`Failed to Calculated AvailableToWithdraw: ${error.message}`);
+            }
+        } else {
+            try {
+                const response = await axios.get(`https://api.dsf.finance/deposit/all/${depositor_}`);
+                console.log(`https://api.dsf.finance/deposit/all/${depositor_}`)
                 const deposits = response.data.deposits;
                 const transaction = deposits.find(deposit => deposit.txHash.toLowerCase() === txHash.toLowerCase());
 
-                //console.log(`API response for depositor ${depositor} : ${JSON.stringify(response.data)}`);
+                console.log(`API response for depositor ${depositor} : ${JSON.stringify(response.data)}`);
 
                 if (transaction) {
                     lpPrice = transaction.lpPrice;
-                    AvailableToWithdraw = transaction.amount.toFixed(8);
+                    AvailableToWithdraw = transaction.amount.toFixed(2);
                     console.log(`Transaction found in API. lpPrice: ${lpPrice}, AvailableToWithdraw: ${AvailableToWithdraw}`);
                 } else {
                     console.log(`Transaction not found in API.`);
-                    AvailableToWithdraw = NaN;
-                    lpPrice = NaN;
+                    AvailableToWithdraw = 0;
+                    lpPrice = 0;
                 }
             } catch (error) {
                 console.error(`Failed to fetch transaction data from API: ${error.message}`);
-                AvailableToWithdraw = NaN;
-                lpPrice = NaN;
+                AvailableToWithdraw = 0;
+                lpPrice = 0;
             }
         }
 
         // Проверка на случай, если AvailableToWithdraw все еще undefined или NaN
-        if (isNaN(AvailableToWithdraw) || AvailableToWithdraw === undefined) {
+        if (AvailableToWithdraw === 0 || isNaN(AvailableToWithdraw) || AvailableToWithdraw === undefined || AvailableToWithdraw === null) {
             console.error(`AvailableToWithdraw is NaN or undefined for txHash: ${txHash}, depositor: ${depositor}`);
             AvailableToWithdraw = 0; // Устанавливаем значение по умолчанию
+            return 0;
         }
 
         // Сохранение данных в таблицу
         await pool.query(
             'INSERT INTO transactionsWOCoin (txHash, depositor, lpShares, AvailableToWithdraw, lpPrice) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE AvailableToWithdraw = VALUES(AvailableToWithdraw), lpPrice = VALUES(lpPrice)',
-            [txHash, depositor, lpShares, AvailableToWithdraw, lpPrice]
+            [txHash, depositor, lpShares.toFixed(2), AvailableToWithdraw.toFixed(2), lpPrice]
         );
         console.log(`Stored transaction data: ${txHash}, AvailableToWithdraw: ${AvailableToWithdraw}, lpPrice: ${lpPrice}`);
 
         return AvailableToWithdraw;
     } catch (error) {
         console.error(`Error processing transaction: ${error.message}`);
-        return NaN;
+        return 0;
     }
 }
 
