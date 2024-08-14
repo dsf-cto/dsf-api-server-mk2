@@ -1097,21 +1097,7 @@ async function calculateCurrentDeposit(walletAddress) {
                 const withdrawnLpShares = parseFloat(returnValues.lpShares);
                 const sharePercentage = withdrawnLpShares / totalLpShares;
 
-                let withdrawnUSD;
-
-                // Проверка наличия "realWithdrawnAmount" в returnValues
-                if (returnValues.realWithdrawnAmount) {
-                    const realWithdrawnDAI = parseFloat(returnValues.realWithdrawnAmount.DAI || 0);
-                    const realWithdrawnUSDC = parseFloat(returnValues.realWithdrawnAmount.USDC || 0);
-                    const realWithdrawnUSDT = parseFloat(returnValues.realWithdrawnAmount.USDT || 0);
-            
-                    // Суммируем реальные суммы вывода в USD
-                    withdrawnUSD = realWithdrawnDAI + realWithdrawnUSDC + realWithdrawnUSDT;
-                } else {
-                    // Если "realWithdrawnAmount" отсутствует, рассчитываем по проценту доли
-                    withdrawnUSD = totalDepositedUSD * sharePercentage;
-                }                
-                
+                const withdrawnUSD = totalDepositedUSD * sharePercentage;
                 totalDepositedUSD -= withdrawnUSD;
 
                 if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
