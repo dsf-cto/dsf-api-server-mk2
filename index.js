@@ -1,4 +1,4 @@
-// DSF.Finance API Server Mk6.6.1
+// DSF.Finance API Server Mk6
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
@@ -21,6 +21,7 @@ const userDepositsCache = new NodeCache({ stdTTL: 86400 }); // Кэш с TTL 864
 const apyCache = new NodeCache({ stdTTL: 10800 }); // 10800  секунд = 3 часа
 
 const llama = new NodeCache({ stdTTL: 10800 }); // АПИ из дефиламы без изменений
+
 
 // Параметры конфигурации для pLimit
 const MAX_CONCURRENT_REQUESTS = 5; // Максимальное количество одновременных запросов
@@ -165,9 +166,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
-const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-        await pool.query(dropTableQuery);
-        console.log(`Таблица успешно удалена`);
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
+//         await pool.query(dropTableQuery);
+//         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
@@ -1106,6 +1107,34 @@ async function calculateCurrentDeposit(walletAddress) {
                 totalLpShares -= withdrawnLpShares;
                 logInfo(`Updated totalDepositedUSD : ${totalDepositedUSD}, totalLpShares : ${totalLpShares}`);
             }
+
+            // } else if (event.event === 'Withdrawn') {
+            //     const withdrawnLpShares = parseFloat(returnValues.lpShares);
+            //     const sharePercentage = withdrawnLpShares / totalLpShares;
+
+            //     let withdrawnUSD;
+
+            //     // Проверка наличия "realWithdrawnAmount" в returnValues
+            //     if (returnValues.realWithdrawnAmount) {
+            //         const realWithdrawnDAI = parseFloat(returnValues.realWithdrawnAmount.DAI || 0);
+            //         const realWithdrawnUSDC = parseFloat(returnValues.realWithdrawnAmount.USDC || 0);
+            //         const realWithdrawnUSDT = parseFloat(returnValues.realWithdrawnAmount.USDT || 0);
+            
+            //         // Суммируем реальные суммы вывода в USD
+            //         withdrawnUSD = realWithdrawnDAI + realWithdrawnUSDC + realWithdrawnUSDT;
+            //     } else {
+            //         // Если "realWithdrawnAmount" отсутствует, рассчитываем по проценту доли
+            //         withdrawnUSD = totalDepositedUSD * sharePercentage;
+            //     }                
+                
+            //     totalDepositedUSD -= withdrawnUSD;
+
+            //     if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
+            //     if (totalLpShares < 0) totalLpShares = 0; // Защита от отрицательных значений
+
+            //     totalLpShares -= withdrawnLpShares;
+            //     logInfo(`Updated totalDepositedUSD : ${totalDepositedUSD}, totalLpShares : ${totalLpShares}`);
+            // }
         }
 
         // Обновляем информацию в user_deposits
@@ -2370,7 +2399,7 @@ async function initializeEthPriceData() {
 // let initializationCompleted = false; // Изначально инициализация не завершена
 // let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
 
-// Функция для начальной инициализации отсутствующих событий
+// Функция для начальной и периодической инициализации новых событий
 async function initializeMissingEvents() {
     try {
         console.log(`Initializing missing events...`);
@@ -2383,8 +2412,10 @@ async function initializeMissingEvents() {
 
         if (lastEventBlock >= latestBlock) {
             console.log(`No new blocks to process.`);
-            initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
+            if (!initializationTelegramBotEvents) {
+                initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
             console.log(`telegramBotEvets : activated (${initializationTelegramBotEvents})`);
+            }
             return;
         }
 
@@ -2396,39 +2427,10 @@ async function initializeMissingEvents() {
 
         console.log(`Fetched and stored missing events up to block ${latestBlock}.`);
 
-        initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
-        console.log(`telegramBotEvets : activated (${initializationTelegramBotEvents})`);
-    } catch (error) {
-        logError(`Failed to initialize missing events : ${error}`);
-    }
-}
-
-// Функция для начальной инициализации отсутствующих событий, начиная с blockNumber 
-// Для поиска пропущеных событий при оптимизированных транзакциях
-async function missingCheckForEvents() {
-    try {
-        await delay(1000); // Задержка 1 секунда
-        console.log(`Additional block check...`);
-
-        const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
-        const [rows] = await pool.query(lastEventBlockQuery);
-        const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
-
-        const latestBlock = await fetchLatestBlockFromEtherscan();
-
-        if (lastEventBlock >= latestBlock) {
-            console.log(`No new blocks to process.`);
-            return;
+        if (!initializationTelegramBotEvents) {
+            initializationTelegramBotEvents = true; // Запуск Телеграм бота Уведомляющего об эвентах
+            console.log(`telegramBotEvets : activated (${initializationTelegramBotEvents})`);
         }
-
-        // Начинаем с последнего проверенного блока
-        const fromBlock = lastEventBlock;
-        const toBlock = latestBlock;
-
-        const events = await fetchEventsUsingWeb3(fromBlock, toBlock);
-        await storeEvents(events);
-        
-        //console.log(`Fetched and stored missing events up to block ${latestBlock}.`);
     } catch (error) {
         logError(`Failed to initialize missing events : ${error}`);
     }
@@ -2453,11 +2455,10 @@ async function getLastCheckedBlock() {
     return rows.length ? BigInt(rows[0].value) : BigInt(0);
 }
 
-// 1 //New2
-// Функция для проверки наличия новых событий
+// v2
 async function checkForNewEvents() {
     if (!initializationCompleted) {
-        //console.log(`Initialization not completed. Skipping check for new events.`);
+        console.log(`Initialization not completed. Skipping check for new events.`);
         return;
     }
 
@@ -2470,20 +2471,17 @@ async function checkForNewEvents() {
         const lastEventBlockQuery = `SELECT MAX(blockNumber) as lastBlock FROM contract_events`;
         const [rows] = await pool.query(lastEventBlockQuery);
         const lastEventBlock = rows[0].lastBlock ? BigInt(rows[0].lastBlock) : BigInt(0);
-        //console.log(`Last event block from database : ${lastEventBlock}`);
 
         // Получаем номер последнего блока из Etherscan
         const latestBlock = BigInt(await fetchLatestBlockFromEtherscan());
-        //console.log(`Latest block from Etherscan : ${latestBlock}`);
         
         // Получение номера последнего проверенного блока из таблицы settings
         const lastCheckedBlock = BigInt(await getLastCheckedBlock());
-        //console.log(`Last checked block from settings : ${lastCheckedBlock}`);
 
-        // Общее логирование информации о блоках
-        console.log(`Block Info - Last event block from database : ${lastEventBlock}, Latest block from Etherscan : ${latestBlock}, Last checked block from settings : ${lastCheckedBlock}`);
+        console.log(`Block Info - Last event block from database: ${lastEventBlock}, Latest block from Etherscan: ${latestBlock}, Last checked block from settings: ${lastCheckedBlock}`);
 
         // Выбор начального блока для проверки
+        //let fromBlock = lastCheckedBlock === BigInt(0) ? lastEventBlock + BigInt(1) : Math.max(lastEventBlock + BigInt(1), lastCheckedBlock + BigInt(1));
         let fromBlock;
         if (lastCheckedBlock === BigInt(0)) {
             fromBlock = lastEventBlock + BigInt(1);
@@ -2498,10 +2496,10 @@ async function checkForNewEvents() {
             initializationCompleted = true;
             return;
         }
-        
-        let newEventsFetched = false;
-        let autoCompoundAllFound = false; // Флаг для проверки события AutoCompoundAll
-        
+
+        let newEventsFound = false;
+        let autoCompoundAllFound = false;
+
         // Проверка новых блоков на события
         while (fromBlock <= latestBlock) {
             const toBlock = fromBlock + BigInt(1000) <= latestBlock ? fromBlock + BigInt(9999) : latestBlock;
@@ -2512,51 +2510,53 @@ async function checkForNewEvents() {
             const events = await fetchEventsWithRetry(fromBlock, toBlock);
 
             if (events.length > 0) {
-                await storeEvents(events, true); // Сохраняем новые события в базе данных. Передаем true, чтобы указывать, что это новые события 
-                newEventsFetched = true; // Устанавливаем флаг, если есть новые события
-                console.log(`Stored ${events.length} events from blocks ${fromBlock} to ${toBlock}`);
-            
-                // Проверка на наличие события AutoCompoundAll
+                newEventsFound = true;
+
+                // Проверяем наличие события AutoCompoundAll
                 if (events.some(event => event.event === 'AutoCompoundAll')) {
                     autoCompoundAllFound = true;
                 }
+                break;  // Прерываем цикл, если найдены новые события
             }
             
             fromBlock = toBlock + BigInt(1);
         }
 
-        //process.stdout.write(`Fetched and stored new events up to block ${latestBlock}.`);
-        await updateLastCheckedBlock(latestBlock); // Обновляем последний проверенный блок на latestBlock
-        console.log(`Fetched and stored new events up to block & Last checked block updated to ${latestBlock}`);
+        if (newEventsFound) {
+            console.log(`New events found. Initializing missing events...`);
+            await initializeMissingEvents().catch(console.error); // Запускаем поиск всех новых событий
 
-        // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
-        if (autoCompoundAllFound) {
-            logWarning(`AutoCompoundAll event found, calculating incomeDSF...`);
-            await calculateIncomeDSF();
+            // Удаление дубликатов событий
+            await removeDuplicateEvents();
+
+            // Обновление таблицы уникальных депозиторов
+            await populateUniqueDepositors();
+
+            // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
+            if (autoCompoundAllFound) {
+                logWarning(`AutoCompoundAll event found, calculating incomeDSF...`);
+                await calculateIncomeDSF();
+            }
+
+            // Обновление данных всех кошельков
+            await updateAllWallets();
         }
 
-        if (newEventsFetched) {
-            await delay(1000); // Задержка 1 секунда
-            logSuccess(`New events found, updating unique depositors and wallets.`);
-            
-            // тестирую
-            await missingCheckForEvents() // проверяем блок на упущенные события 
-            await removeDuplicateEvents(); // удаления возможных дублей
-
-            await populateUniqueDepositors(); // Обновляем таблицу уникальных депозиторов
-            await updateAllWallets(); // Обновляем все кошельки
-        }
+        // Обновляем последний проверенный блок на latestBlock
+        await updateLastCheckedBlock(latestBlock);
+        console.log(`Last checked block updated to ${latestBlock}`);
 
     } catch (error) {
         if (error.code === 'PROTOCOL_CONNECTION_LOST') {
             logError(`Connection lost. Reconnecting...`);
             await createPool(); // Создаем новый пул соединений
         }
-        logError(`Failed to check for new events : ${error}`);
+        logError(`Failed to check for new events: ${error}`);
     } finally {
         initializationCompleted = true;
     }
 }
+
 
 /// 1
 // Функция для получения событий из Etherscan
@@ -2682,35 +2682,8 @@ function formatBigInt(value, decimals) {
 }
 
 // тест
-// async function storeEvents(events, isNewEvents = false) {
-//     // Separate Transfer events from other events
-//     const transferEvents = [];
-//     const otherEvents = [];
-
-//     for (const event of events) {
-//         if (event.event === 'Transfer') {
-//             transferEvents.push(event);
-//         } else {
-//             otherEvents.push(event);
-//         }
-//     }
-
-//     // Process non-Transfer events first
-//     // Сначала обрабатываем события, отличные от Transfer
-//     for (const event of otherEvents) {
-//         await processEvent(event, isNewEvents);
-//     }
-
-//     // Process Transfer events
-//     // Затем обрабатываем события Transfer
-//     for (const event of transferEvents) {
-//         await processEvent(event, isNewEvents);
-//     }
-// }
-
-// тест
 // Функция для хранения событий
-async function storeEvents(events, isNewEvents = false) {
+async function storeEvents(events) {
     const MAX_CONCURRENT_REQUESTS = 10; // Определяем максимальное количество одновременных запросов
     const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
@@ -2726,15 +2699,15 @@ async function storeEvents(events, isNewEvents = false) {
         [[], []]
     );
 
-    await Promise.all(otherEvents.map(event => limit(() => processEvent(event, isNewEvents))));
-    await Promise.all(transferEvents.map(event => limit(() => processEvent(event, isNewEvents))));
+    await Promise.all(otherEvents.map(event => limit(() => processEvent(event))));
+    await Promise.all(transferEvents.map(event => limit(() => processEvent(event))));
 }
 
 // Функция для добавления задержки
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Функция для обработки событий
-async function processEvent(event, isNewEvents) {
+async function processEvent(event) {
 
     await delay(900); // Задержка 900 миллисекунд
 
@@ -3092,17 +3065,13 @@ async function processEvent(event, isNewEvents) {
     }
 
     // Если событие Transfer или Deposited или Withdrawn, и это новое событие, рассчитываем и записываем availableToWithdraw
-    if (isNewEvents && (formattedEvent.event === 'Transfer' || formattedEvent.event === 'Deposited' || formattedEvent.event === 'Withdrawn')) {
-        await storeAvailableToWithdraw(formattedEvent);
-        
-        if (initializationTelegramBotEvents) {
-            // Обновляем депозиты в кеш и базе данных
-            if (formattedEvent.event === 'Transfer') {
-                await updateUserDeposit(event.returnValues.from);
-                await updateUserDeposit(event.returnValues.to);
-            } else {
-                await updateUserDeposit(event.returnValues.depositor || event.returnValues.withdrawer);
-            }
+    if (initializationTelegramBotEvents && (formattedEvent.event === 'Transfer' || formattedEvent.event === 'Deposited' || formattedEvent.event === 'Withdrawn')) {
+        // Обновляем депозиты в кеш и базе данных
+        if (formattedEvent.event === 'Transfer') {
+            await updateUserDeposit(event.returnValues.from);
+            await updateUserDeposit(event.returnValues.to);
+        } else {
+            await updateUserDeposit(event.returnValues.depositor || event.returnValues.withdrawer);
         }
     }
 }
@@ -3182,9 +3151,9 @@ async function processTransaction(txHash, depositor, lpShares, status) {
 
         if (status) {
             AvailableToWithdraw = await calculateAvailableToWithdraw(lpShares);
-            console.log(`Calculated AvailableToWithdraw : ${AvailableToWithdraw}`);
+            logSuccess(`Calculated AvailableToWithdraw : ${AvailableToWithdraw}`);
             lpPrice = await retry(() => contractDSF.methods.lpPrice().call()).catch(() => 0);
-            console.log(`Fetched lpPrice                : ${lpPrice}`);
+            logSuccess(`Fetched lpPrice                : ${lpPrice}`);
         } 
         
         if (AvailableToWithdraw === 0 || isNaN(AvailableToWithdraw) || AvailableToWithdraw === undefined || AvailableToWithdraw === null) {
@@ -3702,11 +3671,11 @@ async function getTransactionsByAddressAndBlock(address, blockNumber) {
     }
 }
 
-// Функция для получения всех транзакций с участием одного адреса в указанном блоке
+// Функция для получения статуса транзакции 'Optimized' или 'Standard' при наличии адреса DSF транзакция будет 'Optimized'
 async function showBlockTransactions(address, blockNumber) {
     try {
 
-        logWarning(`address ${address}, blockNumber ${blockNumber}`);
+        logWarning(`Checking transactions for address ${address} in block ${blockNumber}`);
 
         // Получаем все транзакции для данного адреса и блока
         const transactions = await getTransactionsByAddressAndBlock(address, blockNumber);
@@ -4130,6 +4099,7 @@ app.get('/transactions/:address/:blockNumber', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 const CHART_URL = 'https://yields.llama.fi/chart/8a20c472-142c-4442-b724-40f2183c073e';
 
