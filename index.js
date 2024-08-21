@@ -166,9 +166,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
-const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-        await pool.query(dropTableQuery);
-        console.log(`Таблица успешно удалена`);
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
+//         await pool.query(dropTableQuery);
+//         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
@@ -4144,6 +4144,27 @@ app.get('/yields_llama', async (req, res) => {
     } catch (error) {
         console.error('Error fetching chart data:', error.message);
         res.status(500).json({ error: 'Failed to fetch chart data' });
+    }
+});
+
+// Пересылка АПИ Стаса для показа транзакция в дАпп
+app.get('/api/deposit/all/:address', async (req, res) => {
+    const { address } = req.params;
+
+    try {
+        // Выполняем запрос к внешнему API
+        const response = await axios.get(`https://api.dsf.finance/deposit/all/${address}`);
+
+        // Пересылаем полученный результат клиенту
+        res.json(response.data);
+    } catch (error) {
+        console.error(`Failed to fetch deposit data for address ${address}: ${error.message}`);
+
+        // Если произошла ошибка, возвращаем код ошибки и сообщение
+        res.status(500).json({
+            error: 'Failed to fetch deposit data',
+            message: error.message
+        });
     }
 });
 
