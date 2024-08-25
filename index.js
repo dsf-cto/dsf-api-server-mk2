@@ -2488,7 +2488,7 @@ async function checkForNewEvents() {
         } else if (lastEventBlock >= lastCheckedBlock) {
             fromBlock = lastEventBlock + BigInt(1);
         } else {
-            fromBlock = lastCheckedBlock + BigInt(1);
+            fromBlock = lastCheckedBlock - BigInt(1000);
         }
 
         if (fromBlock > latestBlock) {
