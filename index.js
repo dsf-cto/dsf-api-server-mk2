@@ -936,6 +936,8 @@ async function getWalletDataOptim(walletAddress_, cachedData) {
     } = await calculateSavingsAndSpending(walletAddress_);
 
     let ratioUser;
+    await delay(1000); // Задержка 1 секунда
+
     try {
         ratioUser = await retry(() => ratioContract.methods.calculateLpRatio(walletAddress).call());
     } catch (error) {
@@ -1836,6 +1838,7 @@ async function updateAllWallets() {
         const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
         for (const wallet of wallets) {
+            await delay(1000); // Задержка 1 секунда ТЕСТ
             await limit(() => processWalletUpdate(wallet, cachedData));
         }
 
