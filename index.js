@@ -4197,7 +4197,7 @@ const updateAllData = async () => {
         await delay(1000); // Задержка 1 секунда
 
         // Проверка на упущенные Events
-        //await initializeMissingEvents().catch(console.error);
+        await initializeMissingEvents().catch(console.error);
         await removeDuplicateEvents(); // удаления возможных дублей
         await delay(40000); // Задержка 40 секунда
 
@@ -4243,7 +4243,7 @@ const server = app.listen(port, () => {
     logWarning(`\nServer is listening on port ${port}`);
     updateAllData(); // Запуск последовательного обновления данных
 
-    //setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
