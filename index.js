@@ -4238,9 +4238,9 @@ const server = app.listen(port, () => {
     console.log(`\n${colors.blue}${`    --- Defining  Successful  Future --- `}${colors.reset}\n`);
    
     logWarning(`\nServer is listening on port ${port}`);
-    updateAllData(); // Запуск последовательного обновления данных
+    //updateAllData(); // Запуск последовательного обновления данных
 
-    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    //setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
