@@ -4173,6 +4173,75 @@ app.get('/api/deposit/all/:address', async (req, res) => {
 
 //
 //
+// Доход DSF реалтайм
+//
+//
+
+// Эндпоинт для получения заработка проекта
+app.get('/earnings', async (req, res) => {
+    try {
+        // Получаем общие данные параллельно
+        const [
+            crvEarned,
+            cvxTotalCliffs,
+            cvx_totalSupply,
+            cvx_reductionPerCliff,
+            cvx_balanceOf,
+            crv_balanceOf
+        ] = await Promise.all([
+            retry(() => cvxRewardsContract.methods.earned(contractsLib.DSFStrategy).call()),
+            retry(() => config_cvxContract.methods.totalCliffs().call()),
+            retry(() => config_cvxContract.methods.totalSupply().call()),
+            retry(() => config_cvxContract.methods.reductionPerCliff().call()),
+            retry(() => config_cvxContract.methods.balanceOf(contractsLib.DSFStrategy).call()),
+            retry(() => config_crvContract.methods.balanceOf(contractsLib.DSFStrategy).call())
+        ]);
+
+        const crvEarnedBigInt = BigInt(crvEarned);
+        const cvxTotalCliffsBigInt = BigInt(cvxTotalCliffs);
+        const cvx_totalSupplyBigInt = BigInt(cvx_totalSupply);
+        const cvx_reductionPerCliffBigInt = BigInt(cvx_reductionPerCliff);
+        const cvx_balanceOfBigInt = BigInt(cvx_balanceOf);
+        const crv_balanceOfBigInt = BigInt(crv_balanceOf);
+        
+        // Выполняем расчеты
+        // Выполняем расчеты с использованием BigInt
+        const cvxRemainCliffs = cvxTotalCliffsBigInt - cvx_totalSupplyBigInt / cvx_reductionPerCliffBigInt;
+        const amountInCVX = (crvEarnedBigInt * cvxRemainCliffs) / cvxTotalCliffsBigInt + cvx_balanceOfBigInt;
+        const amountInCRV = crvEarnedBigInt + crv_balanceOfBigInt;
+
+        logInfo(`amountInCVX ${amountInCVX}, amountInCRV ${amountInCRV} `)
+        // Получаем стоимость CRV и CVX
+        const [crvCostArray, cvxCostArray] = await Promise.all([
+            retry(() => routerContract.methods.getAmountsOut(amountInCRV, crvToUsdtPath).call()),
+            retry(() => routerContract.methods.getAmountsOut(amountInCVX, cvxToUsdtPath).call())
+        ]);
+        logInfo(`crvCostArray ${crvCostArray}, cvxCostArray ${cvxCostArray} `)
+
+        const crvCost = Number(crvCostArray[crvCostArray.length - 1]) / 1e6;
+        const cvxCost = Number(cvxCostArray[cvxCostArray.length - 1]) / 1e6;
+
+        logInfo(`crvCost ${crvCost}, cvxCost ${cvxCost} `)
+
+        // Подготавливаем данные для ответа
+        const earningsData = {
+            amountInCRV: Number(amountInCRV) / 1e18,
+            amountInCVX: Number(amountInCVX) / 1e18,
+            crvCost: crvCost,
+            cvxCost: cvxCost,
+            total: (crvCost+cvxCost)
+        };
+
+        // Возвращаем данные
+        res.json(earningsData);
+    } catch (error) {
+        console.error(`Error fetching project earnings: ${error.message}`);
+        res.status(500).json({ error: 'Failed to fetch project earnings' });
+    }
+});
+
+//
+//
 //
 //
 //
