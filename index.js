@@ -2580,7 +2580,7 @@ async function checkForNewEvents() {
             await removeDuplicateEvents();
 
             // Обновление таблицы уникальных депозиторов
-            await populateUniqueDepositors();
+            //await populateUniqueDepositors();
 
             // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
             if (autoCompoundAllFound) {
@@ -3133,6 +3133,9 @@ async function processEvent(event) {
 
     // Если событие Transfer или Deposited или Withdrawn, и это новое событие, рассчитываем и записываем availableToWithdraw
     if (initializationTelegramBotEvents && (formattedEvent.event === 'Transfer' || formattedEvent.event === 'Deposited' || formattedEvent.event === 'Withdrawn')) {
+        
+        // Обновление таблицы уникальных депозиторов
+            await populateUniqueDepositors();
         // Обновляем депозиты в кеш и базе данных
         if (formattedEvent.event === 'Transfer') {
             await updateWalletDataSingl(event.returnValues.to);
