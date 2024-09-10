@@ -1,4 +1,4 @@
-// DSF.Finance API Server Mk6.6.5
+// DSF.Finance API Server Mk6.6.5.1
 import { EventEmitter } from 'events';
 EventEmitter.defaultMaxListeners = 20;
 
@@ -2580,7 +2580,7 @@ async function checkForNewEvents() {
             await removeDuplicateEvents();
 
             // Обновление таблицы уникальных депозиторов
-            //await populateUniqueDepositors();
+            await populateUniqueDepositors();
 
             // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
             if (autoCompoundAllFound) {
