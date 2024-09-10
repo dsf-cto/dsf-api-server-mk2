@@ -1701,6 +1701,11 @@ async function updateWalletData(walletAddress, cachedData) {
 async function updateWalletDataSingl(walletAddress) {
     let connection;
     try {
+        // Проверка, был ли передан адрес кошелька
+        if (!walletAddress) {
+            throw new Error(`Wallet address is required`);
+        }
+        
         // Получение данных кошелька
         const walletData = await getWalletData(walletAddress);
         
@@ -1708,28 +1713,71 @@ async function updateWalletDataSingl(walletAddress) {
         connection = await pool.getConnection();
         
         // Запрос на обновление данных в базе данных
-        const updateQuery = `
-            UPDATE wallet_info SET
-            user_deposits = ?,
-            dsf_lp_balance = ?,
-            ratio_user = ?,
-            available_to_withdraw = ?,
-            cvx_share = ?,
-            cvx_cost = ?,
-            crv_share = ?,
-            crv_cost = ?,
-            annual_yield_rate = ?,
-            apy_today = ?,
-            eth_spent = ?,
-            usd_spent = ?,
-            eth_saved = ?,
-            usd_saved = ?,
-            updated_at = NOW()
-            WHERE wallet_address = ?
+        // const updateQuery = `
+        //     UPDATE wallet_info SET
+        //     user_deposits = ?,
+        //     dsf_lp_balance = ?,
+        //     ratio_user = ?,
+        //     available_to_withdraw = ?,
+        //     cvx_share = ?,
+        //     cvx_cost = ?,
+        //     crv_share = ?,
+        //     crv_cost = ?,
+        //     annual_yield_rate = ?,
+        //     apy_today = ?,
+        //     eth_spent = ?,
+        //     usd_spent = ?,
+        //     eth_saved = ?,
+        //     usd_saved = ?,
+        //     updated_at = NOW()
+        //     WHERE wallet_address = ?
+        // `;
+
+        const upsertQuery = `
+            INSERT INTO wallet_info_test (
+                wallet_address, user_deposits, dsf_lp_balance, ratio_user, available_to_withdraw,
+                cvx_share, cvx_cost, crv_share, crv_cost, annual_yield_rate, apy_today, 
+                eth_spent, usd_spent, eth_saved, usd_saved, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+                user_deposits = VALUES(user_deposits),
+                dsf_lp_balance = VALUES(dsf_lp_balance),
+                ratio_user = VALUES(ratio_user),
+                available_to_withdraw = VALUES(available_to_withdraw),
+                cvx_share = VALUES(cvx_share),
+                cvx_cost = VALUES(cvx_cost),
+                crv_share = VALUES(crv_share),
+                crv_cost = VALUES(crv_cost),
+                annual_yield_rate = VALUES(annual_yield_rate),
+                apy_today = VALUES(apy_today),
+                eth_spent = VALUES(eth_spent),
+                usd_spent = VALUES(usd_spent),
+                eth_saved = VALUES(eth_saved),
+                usd_saved = VALUES(usd_saved),
+                updated_at = NOW()
         `;
 
         // Параметры для запроса обновления
+        // const values = [
+        //     walletData.userDeposits,
+        //     walletData.dsfLpBalance,
+        //     walletData.safeRatioUser,
+        //     walletData.availableToWithdraw,
+        //     walletData.cvxShare,
+        //     walletData.cvxCost,
+        //     walletData.crvShare,
+        //     walletData.crvCost,
+        //     walletData.annualYieldRate,
+        //     walletData.apyToday,
+        //     walletData.ethSpent,
+        //     walletData.usdSpent,
+        //     walletData.ethSaved,
+        //     walletData.usdSaved,
+        //     walletAddress
+        // ];
+
         const values = [
+            walletAddress,
             walletData.userDeposits,
             walletData.dsfLpBalance,
             walletData.safeRatioUser,
@@ -1743,8 +1791,7 @@ async function updateWalletDataSingl(walletAddress) {
             walletData.ethSpent,
             walletData.usdSpent,
             walletData.ethSaved,
-            walletData.usdSaved,
-            walletAddress
+            walletData.usdSaved
         ];
 
         // Выполнение запроса обновления
@@ -2533,7 +2580,7 @@ async function checkForNewEvents() {
             await removeDuplicateEvents();
 
             // Обновление таблицы уникальных депозиторов
-            await populateUniqueDepositors();
+            //await populateUniqueDepositors();
 
             // Если было найдено событие AutoCompoundAll, запускаем calculateIncomeDSF
             if (autoCompoundAllFound) {
@@ -2542,7 +2589,7 @@ async function checkForNewEvents() {
             }
 
             // Обновление данных всех кошельков
-            await updateAllWallets();
+            //await updateAllWallets();
         }
 
         // Обновляем последний проверенный блок на latestBlock
@@ -2798,6 +2845,8 @@ async function processEvent(event) {
                 }
             };
 
+            addUniqueDepositor(event.returnValues.to);
+
             if (initializationTelegramBotEvents) {
                 const message = `Event 'CreatedPendingDeposit' detected!
                     \nURL    : https://etherscan.io/tx/${event.transactionHash}
@@ -2848,6 +2897,8 @@ async function processEvent(event) {
                 event.returnValues.lpShares,
                 initializationTelegramBotEvents
             );
+            
+            addUniqueDepositor(event.returnValues.to);
 
             logWarning(`availableToWithdrawD ${availableToWithdrawD}`);
 
@@ -3015,6 +3066,8 @@ async function processEvent(event) {
                 let usdValue;
                 usdValue = await calculateTransferUSDValue(event);
 
+                addUniqueDepositor(event.returnValues.to);
+
                 // Интеграция processTransaction для событий 'Transfer'
                 console.log(`Calling processTransaction for Deposited event. txHash: ${event.transactionHash}, depositor: ${event.returnValues.depositor}, lpShares: ${event.returnValues.value}`);
                 const availableToWithdrawT = await processTransaction(
@@ -3082,9 +3135,14 @@ async function processEvent(event) {
     if (initializationTelegramBotEvents && (formattedEvent.event === 'Transfer' || formattedEvent.event === 'Deposited' || formattedEvent.event === 'Withdrawn')) {
         // Обновляем депозиты в кеш и базе данных
         if (formattedEvent.event === 'Transfer') {
-            await updateUserDeposit(event.returnValues.from);
+            await updateWalletDataSingl(event.returnValues.to);
+            await updateWalletDataSingl(event.returnValues.from);
+
             await updateUserDeposit(event.returnValues.to);
+            await updateUserDeposit(event.returnValues.from);
+            
         } else {
+            await updateWalletDataSingl(event.returnValues.depositor || event.returnValues.withdrawer);
             await updateUserDeposit(event.returnValues.depositor || event.returnValues.withdrawer);
         }
     }
@@ -3468,6 +3526,27 @@ async function populateUniqueDepositors() {
         console.log(`Already existing        : ${existingCount}\n`);
     } catch (error) {
         logError(`Failed to populate unique depositors : ${error}`);
+    }
+}
+
+// Функция для добавления одного уникального адреса в таблицу unique_depositors
+async function addUniqueDepositor(depositor) {
+    try {
+        const [result] = await pool.query(
+            `INSERT INTO unique_depositors (depositor_address)
+             VALUES (?)
+             ON DUPLICATE KEY UPDATE depositor_address = depositor_address`,
+            [depositor]
+        );
+
+        // Если строка была добавлена (т.е. нового адреса не было)
+        if (result.affectedRows > 0 && result.warningCount === 0) {
+            console.log(`Added new depositor: ${depositor}`);
+        } else {
+            console.log(`Depositor already exists: ${depositor}`);
+        }
+    } catch (error) {
+        console.error(`Failed to add depositor ${depositor}: ${error.message}`);
     }
 }
 
