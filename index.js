@@ -166,9 +166,9 @@ testConnection();
 //         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase contract_events: 
-const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
-        await pool.query(dropTableQuery);
-        console.log(`Таблица успешно удалена`);
+// const dropTableQuery = `DROP TABLE IF EXISTS contract_events;`;
+//         await pool.query(dropTableQuery);
+//         console.log(`Таблица успешно удалена`);
 
 // For RESTART DataBase personal_yield_rate: 
 // const dropTableQuery = `DROP TABLE IF EXISTS personal_yield_rate;`;
@@ -1795,7 +1795,7 @@ async function updateWalletDataSingl(walletAddress) {
         ];
 
         // Выполнение запроса обновления
-        await connection.query(updateQuery, values);
+        await connection.query(upsertQuery, values);
         logSuccess(`Data updated for wallet : ${walletAddress}`);
     } catch (error) {
         logError(`Error updating wallet data for ${walletAddress} : ${error}`);
@@ -4361,7 +4361,7 @@ const updateAllData = async () => {
         //logSuccess(`APY data updated successfully.`);
         
         // Обновление данныхкошельков
-        await updateAllWallets();
+        //await updateAllWallets();
         //logSuccess(`Wallets updated successfully.`);
 
         // Расчет доходов DSF с каждого кошелька
