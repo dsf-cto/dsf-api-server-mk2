@@ -2589,7 +2589,7 @@ async function checkForNewEvents() {
             }
 
             // Обновление данных всех кошельков
-            //await updateAllWallets();
+            await updateAllWallets();
         }
 
         // Обновляем последний проверенный блок на latestBlock
