@@ -3959,22 +3959,22 @@ async function calculateIncomeDSF() {
 
                 totalLpShares += shares;
                 lpShares.set(returnValues.depositor, (lpShares.get(returnValues.depositor) || 0.0) + shares);
-                console.log(`Deposited : ${shares} shares to ${returnValues.depositor}, totalLpShares : ${totalLpShares}`);
+                // console.log(`Deposited : ${shares} shares to ${returnValues.depositor}, totalLpShares : ${totalLpShares}`);
             } else if (event.event === 'Withdrawn') {
                 const shares = parseFloat(returnValues.lpShares || 0);
 
                 totalLpShares -= shares;
                 lpShares.set(returnValues.withdrawer, (lpShares.get(returnValues.withdrawer) || 0.0) - shares);
-                console.log(`Withdrawn : ${shares} shares from ${returnValues.withdrawer}, totalLpShares : ${totalLpShares}`);
+                // console.log(`Withdrawn : ${shares} shares from ${returnValues.withdrawer}, totalLpShares : ${totalLpShares}`);
             } else if (event.event === 'Transfer') {
                 const shares = parseFloat(returnValues.value || 0);
 
                 lpShares.set(returnValues.from, (lpShares.get(returnValues.from) || 0.0) - shares);
                 lpShares.set(returnValues.to, (lpShares.get(returnValues.to) || 0.0) + shares);
-                console.log(`Transfer : ${shares} shares from ${returnValues.from} to ${returnValues.to}`);
+                // console.log(`Transfer : ${shares} shares from ${returnValues.from} to ${returnValues.to}`);
             } else if (event.event === 'AutoCompoundAll') {
                 const incomeDSF = parseFloat(returnValues.incomeDSF || 0);
-                logWarning(`AutoCompoundAll : incomeDSF ${incomeDSF} at block ${event.blockNumber}`);
+                // logWarning(`AutoCompoundAll : incomeDSF ${incomeDSF} at block ${event.blockNumber}`);
 
                 for (const wallet of uniqueDepositors) {
                     const walletLpShares = lpShares.get(wallet) || 0.0;
@@ -3988,7 +3988,7 @@ async function calculateIncomeDSF() {
                         incomeDSFMap.set(wallet, walletIncomeBefore + walletIncome);
 
                         //incomeDSFMap.set(wallet, (incomeDSFMap.get(wallet) || 0.0) + walletIncome);
-                        console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome ${walletIncome}, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
+                        // console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome ${walletIncome}, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
                     } else {
                         console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome 0.0, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
                     }
