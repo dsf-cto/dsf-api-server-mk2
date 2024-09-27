@@ -3990,7 +3990,7 @@ async function calculateIncomeDSF() {
                         //incomeDSFMap.set(wallet, (incomeDSFMap.get(wallet) || 0.0) + walletIncome);
                         // console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome ${walletIncome}, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
                     } else {
-                        console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome 0.0, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
+                        // console.log(`AutoCompoundAll : wallet ${wallet}, walletIncome 0.0, totalWalletIncome ${incomeDSFMap.get(wallet)}`);
                     }
                 }
             }
