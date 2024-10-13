@@ -1108,35 +1108,7 @@ async function calculateCurrentDeposit(walletAddress) {
 
                 totalLpShares -= withdrawnLpShares;
                 logInfo(`Updated totalDepositedUSD : ${totalDepositedUSD}, totalLpShares : ${totalLpShares}`);
-            }
-
-            // } else if (event.event === 'Withdrawn') {
-            //     const withdrawnLpShares = parseFloat(returnValues.lpShares);
-            //     const sharePercentage = withdrawnLpShares / totalLpShares;
-
-            //     let withdrawnUSD;
-
-            //     // Проверка наличия "realWithdrawnAmount" в returnValues
-            //     if (returnValues.realWithdrawnAmount) {
-            //         const realWithdrawnDAI = parseFloat(returnValues.realWithdrawnAmount.DAI || 0);
-            //         const realWithdrawnUSDC = parseFloat(returnValues.realWithdrawnAmount.USDC || 0);
-            //         const realWithdrawnUSDT = parseFloat(returnValues.realWithdrawnAmount.USDT || 0);
-            
-            //         // Суммируем реальные суммы вывода в USD
-            //         withdrawnUSD = realWithdrawnDAI + realWithdrawnUSDC + realWithdrawnUSDT;
-            //     } else {
-            //         // Если "realWithdrawnAmount" отсутствует, рассчитываем по проценту доли
-            //         withdrawnUSD = totalDepositedUSD * sharePercentage;
-            //     }                
-                
-            //     totalDepositedUSD -= withdrawnUSD;
-
-            //     if (totalDepositedUSD < 0) totalDepositedUSD = 0; // Защита от отрицательных значений
-            //     if (totalLpShares < 0) totalLpShares = 0; // Защита от отрицательных значений
-
-            //     totalLpShares -= withdrawnLpShares;
-            //     logInfo(`Updated totalDepositedUSD : ${totalDepositedUSD}, totalLpShares : ${totalLpShares}`);
-            // }
+            }  
         }
 
         // Обновляем информацию в user_deposits
@@ -1713,26 +1685,6 @@ async function updateWalletDataSingl(walletAddress) {
         connection = await pool.getConnection();
         
         // Запрос на обновление данных в базе данных
-        // const updateQuery = `
-        //     UPDATE wallet_info SET
-        //     user_deposits = ?,
-        //     dsf_lp_balance = ?,
-        //     ratio_user = ?,
-        //     available_to_withdraw = ?,
-        //     cvx_share = ?,
-        //     cvx_cost = ?,
-        //     crv_share = ?,
-        //     crv_cost = ?,
-        //     annual_yield_rate = ?,
-        //     apy_today = ?,
-        //     eth_spent = ?,
-        //     usd_spent = ?,
-        //     eth_saved = ?,
-        //     usd_saved = ?,
-        //     updated_at = NOW()
-        //     WHERE wallet_address = ?
-        // `;
-
         const upsertQuery = `
             INSERT INTO wallet_info_test (
                 wallet_address, user_deposits, dsf_lp_balance, ratio_user, available_to_withdraw,
@@ -1756,25 +1708,6 @@ async function updateWalletDataSingl(walletAddress) {
                 usd_saved = VALUES(usd_saved),
                 updated_at = NOW()
         `;
-
-        // Параметры для запроса обновления
-        // const values = [
-        //     walletData.userDeposits,
-        //     walletData.dsfLpBalance,
-        //     walletData.safeRatioUser,
-        //     walletData.availableToWithdraw,
-        //     walletData.cvxShare,
-        //     walletData.cvxCost,
-        //     walletData.crvShare,
-        //     walletData.crvCost,
-        //     walletData.annualYieldRate,
-        //     walletData.apyToday,
-        //     walletData.ethSpent,
-        //     walletData.usdSpent,
-        //     walletData.ethSaved,
-        //     walletData.usdSaved,
-        //     walletAddress
-        // ];
 
         const values = [
             walletAddress,
@@ -2085,28 +2018,28 @@ app.get('/wallet/:walletAddress', async (req, res) => {
 });
 
 // Вызов функции обновления всех кошельков раз в 3 часа
-cron.schedule('0 */3 * * *', async () => {
-    logInfo('UpdateAllWallets - Running a task every 3 hours');
-    try {
-        await populateUniqueDepositors();
-        await updateAllWallets(); // Вызов функции обновления всех кошельков
-        //logInfo('All wallets updated successfully.');
-    } catch (error) {
-        logError('Failed to update all wallets:', error);
-    }
-});
+// cron.schedule('0 */3 * * *', async () => {
+//     logInfo('UpdateAllWallets - Running a task every 3 hours');
+//     try {
+//         await populateUniqueDepositors();
+//         await updateAllWallets(); // Вызов функции обновления всех кошельков
+//         //logInfo('All wallets updated successfully.');
+//     } catch (error) {
+//         logError('Failed to update all wallets:', error);
+//     }
+// });
 
 // NEW Разблокировать после теста
 // Создаем cron-задачу для периодического обновления данных APY каждый час
-cron.schedule('0 */1 * * *', async () => {
-    logInfo('Fetching APY data... Every 1 hour');
-    try {
-        await addNewDayApyData();
-        //logInfo('APY data updated successfully.');
-    } catch (error) {
-        logError('Failed to update APY data:', error);
-    }
-}); 
+// cron.schedule('0 */1 * * *', async () => {
+//     logInfo('Fetching APY data... Every 1 hour');
+//     try {
+//         await addNewDayApyData();
+//         //logInfo('APY data updated successfully.');
+//     } catch (error) {
+//         logError('Failed to update APY data:', error);
+//     }
+// }); 
 
 // Создаем cron-задачу для периодического обновления данных APY 
 // cron.schedule('* * * * *', async () => {
@@ -2446,9 +2379,6 @@ async function initializeEthPriceData() {
     }
 }
 
-// let initializationCompleted = false; // Изначально инициализация не завершена
-// let initializationTelegramBotEvents = false; // Изначально Телеграм бот Уведомляющий об эвентах не запущен
-
 // Функция для начальной и периодической инициализации новых событий
 async function initializeMissingEvents() {
     try {
@@ -2752,33 +2682,6 @@ async function storeEvents(events) {
     await Promise.all(otherEvents.map(event => limit(() => processEvent(event))));
     await Promise.all(transferEvents.map(event => limit(() => processEvent(event))));
 }
-
-// async function storeEvents(events) {
-
-//     // Separate Transfer events from other events
-//     const transferEvents = [];
-//     const otherEvents = [];
-
-//     for (const event of events) {
-//         if (event.event === 'Transfer') {
-//             transferEvents.push(event);
-//         } else {
-//             otherEvents.push(event);
-//         }
-//     }
-
-//     // Process non-Transfer events first
-//     // Сначала обрабатываем события, отличные от Transfer
-//     for (const event of otherEvents) {
-//         await processEvent(event);
-//     }
-
-//     // Process Transfer events
-//     // Затем обрабатываем события Transfer
-//     for (const event of transferEvents) {
-//         await processEvent(event);
-//     }
-// }
 
 // Функция для добавления задержки
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -4392,9 +4295,9 @@ const server = app.listen(port, () => {
     console.log(`\n${colors.blue}${`    --- Defining  Successful  Future --- `}${colors.reset}\n`);
    
     logWarning(`\nServer is listening on port ${port}`);
-    updateAllData(); // Запуск последовательного обновления данных
+    // updateAllData(); // Запуск последовательного обновления данных
 
-    setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
+    // setInterval(checkForNewEvents, 30000);  // Проверка каждые 30 секунд
 });
 
 // Увеличение таймаута соединения
